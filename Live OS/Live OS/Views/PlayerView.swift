@@ -51,6 +51,11 @@ struct PlayerView: View {
     // Progress bar scrub state
     @State private var isScrubbing = false
 
+    // Indicator 隐藏 Task（用于取消管理）
+    @State private var seekHideTask: Task<Void, Never>?
+    @State private var volumeHideTask: Task<Void, Never>?
+    @State private var brightnessHideTask: Task<Void, Never>?
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -62,13 +67,13 @@ struct PlayerView: View {
                 // Gesture layer — pure SwiftUI, no UIKit touch interception
                 Color.clear
                     .contentShape(Rectangle())
-                    .gesture(TapGesture(count: 2).onEnded {
+                    .onTapGesture(count: 2) {
                         togglePlay()
                         revealControlsTemporarily()
-                    })
-                    .gesture(TapGesture(count: 1).onEnded {
+                    }
+                    .onTapGesture(count: 1) {
                         toggleControls()
-                    })
+                    }
                     .gesture(tapAndSwipeGesture)
                     .gesture(longPressBoostGesture)
 
@@ -180,12 +185,6 @@ struct PlayerView: View {
                     hideSeekIndicatorSoon()
                 } else {
                     scheduleControlsAutoHide()
-                }
-
-                // If very short drag (< 20px, < 0.3s) → treat as tap
-                let dragDist = hypot(value.translation.width, value.translation.height)
-                if dragDist < 20 {
-                    toggleControls()
                 }
             }
     }
@@ -503,6 +502,17 @@ struct PlayerView: View {
         }
     }
 
+    private func toggleControls() {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showControls.toggle()
+        }
+        if showControls {
+            scheduleControlsAutoHide()
+        } else {
+            controlsHideTask?.cancel()
+        }
+    }
+
     private func revealControlsTemporarily() {
         withAnimation(.easeInOut(duration: 0.18)) {
             showControls = true
@@ -562,28 +572,37 @@ struct PlayerView: View {
     }
 
     private func hideSeekIndicatorSoon() {
-        Task {
+        seekHideTask?.cancel()
+        seekHideTask = Task {
             try? await Task.sleep(for: .milliseconds(700))
-            await MainActor.run { showSeekIndicator = false }
+            if !Task.isCancelled {
+                await MainActor.run { showSeekIndicator = false }
+            }
         }
     }
 
     private func hideVolumeIndicatorSoon() {
-        Task {
+        volumeHideTask?.cancel()
+        volumeHideTask = Task {
             try? await Task.sleep(for: .milliseconds(650))
-            await MainActor.run {
-                showVolumeIndicator = false
-                scheduleControlsAutoHide()
+            if !Task.isCancelled {
+                await MainActor.run {
+                    showVolumeIndicator = false
+                    scheduleControlsAutoHide()
+                }
             }
         }
     }
 
     private func hideBrightnessIndicatorSoon() {
-        Task {
+        brightnessHideTask?.cancel()
+        brightnessHideTask = Task {
             try? await Task.sleep(for: .milliseconds(650))
-            await MainActor.run {
-                showBrightnessIndicator = false
-                scheduleControlsAutoHide()
+            if !Task.isCancelled {
+                await MainActor.run {
+                    showBrightnessIndicator = false
+                    scheduleControlsAutoHide()
+                }
             }
         }
     }

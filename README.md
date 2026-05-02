@@ -21,8 +21,8 @@
 ### 环境要求
 
 - macOS 操作系统
-- Xcode 15 或更高版本
-- iOS 16.0 或更高版本的 iPhone/iPad
+- Xcode 16 或更高版本
+- iOS 17.0 或更高版本的 iPhone/iPad
 
 ### 编译步骤
 

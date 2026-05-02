@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 final class APIClient {
     private let session: URLSession
     private let decoder: JSONDecoder
@@ -124,6 +125,17 @@ final class APIClient {
     func deleteFiles(relPaths: [String]) async throws {
         let body = try JSONEncoder().encode(["paths": relPaths])
         _ = try await fetch(APIResponse<EmptyData>.self, path: "/api/batch/file/delete", method: "POST", body: body)
+    }
+
+    // MARK: - Watch history
+
+    func getWatchHistory() async throws -> [HistoryEntry] {
+        try await fetch([HistoryEntry].self, path: "/api/history")
+    }
+
+    func deleteWatchHistory(videoPath: String) async throws {
+        let encoded = encodedRelPath(videoPath)
+        _ = try await fetch(APIResponse<EmptyData>.self, path: "/api/history/\(encoded)", method: "DELETE")
     }
 
     // MARK: - Signed URLs

@@ -43,17 +43,10 @@ struct VideoLibraryView: View {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(vm.rooms) { room in
-                        if room.recording, let url = room.url.flatMap(URL.init(string:)) {
-                            Button { UIApplication.shared.open(url) } label: {
-                                RoomCard(room: room, client: appConfig.client)
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            NavigationLink(destination: VideoListView(room: room)) {
-                                RoomCard(room: room, client: appConfig.client)
-                            }
-                            .buttonStyle(.plain)
+                        NavigationLink(destination: VideoListView(room: room)) {
+                            RoomCard(room: room, client: appConfig.client)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding()

@@ -2,87 +2,58 @@ import SwiftUI
 
 struct HistoryView: View {
     @Environment(AppConfig.self) private var appConfig
-
-    @State private var entries: [HistoryEntry] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
+    @State private var vm: HistoryViewModel?
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading && entries.isEmpty {
-                    ProgressView("加载中…")
-                } else if let err = errorMessage, entries.isEmpty {
-                    ContentUnavailableView("无法加载", systemImage: "exclamationmark.triangle", description: Text(err))
-                } else if entries.isEmpty {
-                    ContentUnavailableView("暂无观看历史", systemImage: "clock", description: Text("观看过的视频会出现在这里"))
+                if let vm {
+                    historyContent(vm)
                 } else {
-                    List {
-                        ForEach(entries) { entry in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(entry.displayName)
-                                    .font(.subheadline.weight(.medium))
-                                    .lineLimit(1)
-                                HStack(spacing: 10) {
-                                    Text("\(formatTime(entry.positionSeconds)) / \(formatTime(entry.durationSeconds))")
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundStyle(.blue)
-                                    Text(entry.updatedAt)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .onDelete(perform: deleteEntries)
-                    }
-                    .refreshable { await load() }
+                    ProgressView()
                 }
             }
             .navigationTitle("观看历史")
-            .task { await load() }
+            .task {
+                let model = HistoryViewModel(client: appConfig.client)
+                vm = model
+                await model.load()
+            }
         }
     }
 
-    private func load() async {
-        isLoading = true
-        errorMessage = nil
-        do {
-            entries = try await fetchHistory()
-        } catch {
-            errorMessage = error.localizedDescription
+    @ViewBuilder
+    private func historyContent(_ vm: HistoryViewModel) -> some View {
+        if vm.isLoading && vm.entries.isEmpty {
+            ProgressView("加载中…")
+        } else if let err = vm.errorMessage, vm.entries.isEmpty {
+            ContentUnavailableView("无法加载", systemImage: "exclamationmark.triangle", description: Text(err))
+        } else if vm.entries.isEmpty {
+            ContentUnavailableView("暂无观看历史", systemImage: "clock", description: Text("观看过的视频会出现在这里"))
+        } else {
+            List {
+                ForEach(vm.entries) { entry in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(entry.displayName)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        HStack(spacing: 10) {
+                            Text("\(formatTime(entry.positionSeconds)) / \(formatTime(entry.durationSeconds))")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.blue)
+                            Text(entry.updatedAt)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .onDelete { offsets in
+                    Task { await vm.deleteEntries(at: offsets) }
+                }
+            }
+            .refreshable { await vm.load() }
         }
-        isLoading = false
-    }
-
-    private func makeRequest(path: String, method: String = "GET") -> URLRequest {
-        let base = appConfig.activeURL.trimmingCharacters(in: .init(charactersIn: "/"))
-        var req = URLRequest(url: URL(string: base + path)!)
-        req.httpMethod = method
-        req.timeoutInterval = 10
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        if !appConfig.apiKey.isEmpty {
-            req.setValue("Bearer \(appConfig.apiKey)", forHTTPHeaderField: "Authorization")
-        }
-        return req
-    }
-
-    private func fetchHistory() async throws -> [HistoryEntry] {
-        let (data, response) = try await URLSession.shared.data(for: makeRequest(path: "/api/history"))
-        if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 401 {
-            throw NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "API Key 鉴权失败，请检查设置"])
-        }
-        return try JSONDecoder().decode([HistoryEntry].self, from: data)
-    }
-
-    private func deleteEntries(at offsets: IndexSet) {
-        for idx in offsets {
-            let entry = entries[idx]
-            let encoded = entry.videoPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? entry.videoPath
-            let req = makeRequest(path: "/api/history/\(encoded)", method: "DELETE")
-            Task { _ = try? await URLSession.shared.data(for: req) }
-        }
-        entries.remove(atOffsets: offsets)
     }
 
     private func formatTime(_ seconds: Double) -> String {
@@ -94,7 +65,54 @@ struct HistoryView: View {
     }
 }
 
-struct HistoryEntry: Identifiable, Codable {
+// MARK: - ViewModel
+
+@Observable
+final class HistoryViewModel {
+    var entries: [HistoryEntry] = []
+    var isLoading = false
+    var errorMessage: String?
+
+    private let client: APIClient
+
+    init(client: APIClient) {
+        self.client = client
+    }
+
+    @MainActor
+    func load() async {
+        let cacheKey = "WatchHistory"
+        // 先读缓存
+        if let cached: [HistoryEntry] = CacheManager.shared.load(forKey: cacheKey, as: [HistoryEntry].self), entries.isEmpty {
+            self.entries = cached
+        }
+        isLoading = entries.isEmpty
+        errorMessage = nil
+        do {
+            let newEntries = try await client.getWatchHistory()
+            self.entries = newEntries
+            CacheManager.shared.save(newEntries, forKey: cacheKey)
+        } catch {
+            if entries.isEmpty {
+                errorMessage = error.localizedDescription
+            }
+        }
+        isLoading = false
+    }
+
+    @MainActor
+    func deleteEntries(at offsets: IndexSet) async {
+        for idx in offsets {
+            let entry = entries[idx]
+            try? await client.deleteWatchHistory(videoPath: entry.videoPath)
+        }
+        entries.remove(atOffsets: offsets)
+    }
+}
+
+// MARK: - Model
+
+struct HistoryEntry: Identifiable, Codable, Equatable {
     let id: Int64
     let videoPath: String
     let videoName: String
@@ -115,4 +133,9 @@ struct HistoryEntry: Identifiable, Codable {
         case durationSeconds = "duration_seconds"
         case updatedAt = "updated_at"
     }
+}
+
+#Preview {
+    HistoryView()
+        .environment(AppConfig())
 }

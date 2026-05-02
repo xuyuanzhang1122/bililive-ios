@@ -139,9 +139,25 @@ final class AppConfig {
             guard let self, !self.lanURL.isEmpty else { return }
 
             let lanReachable = await self.pingServer(self.lanURL)
+
+            // 如果首次检测失败，短暂等待后重试一次（避免瞬时不可达误判）
+            let finalResult: Bool
+            if !lanReachable {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                finalResult = await self.pingServer(self.lanURL)
+            } else {
+                finalResult = true
+            }
+
             if !Task.isCancelled {
                 await MainActor.run {
-                    self.isOnLAN = lanReachable
+                    let changed = self.isOnLAN != finalResult
+                    self.isOnLAN = finalResult
+                    if changed {
+                        // 网络环境变化，清除 APIClient 缓存以强制使用新 URL
+                        self._cachedClient = nil
+                    }
                 }
             }
         }
@@ -163,7 +179,7 @@ final class AppConfig {
         do {
             let (_, response) = try await URLSession.shared.data(for: req)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            return status == 200
+            return (200..<400).contains(status)
         } catch {
             return false
         }
