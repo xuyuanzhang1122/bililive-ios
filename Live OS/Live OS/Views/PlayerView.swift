@@ -1,853 +1,815 @@
 import AVFoundation
-import AVFAudio
 import Combine
+import CoreMedia
 import MediaPlayer
+import PillarboxPlayer
 import SwiftUI
-import UIKit
-import AVKit
 
-// MARK: - Speed Presets
+// MARK: - Volume Manager
+final class VolumeManager: ObservableObject {
+    static let shared = VolumeManager()
+    private var volumeSlider: UISlider?
+    
+    init() {
+        let volumeView = MPVolumeView(frame: .zero)
+        volumeView.alpha = 0.0001
+        for view in volumeView.subviews {
+            if let slider = view as? UISlider {
+                self.volumeSlider = slider
+                break
+            }
+        }
+    }
+    
+    func setVolume(_ value: Float) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+            self.volumeSlider?.value = value
+        }
+    }
+    
+    func getVolume() -> Float {
+        return AVAudioSession.sharedInstance().outputVolume
+    }
+}
 
-private let speedPresets: [Float] = [0.78, 1.0, 1.25, 1.5, 2.0]
+struct SystemVolumeView: UIViewRepresentable {
+    func makeUIView(context: Context) -> MPVolumeView {
+        let volumeView = MPVolumeView(frame: .zero)
+        volumeView.alpha = 0.0001
+        return volumeView
+    }
+    func updateUIView(_ uiView: MPVolumeView, context: Context) {}
+}
+
+// MARK: - Gesture Handler
+enum GestureType {
+    case none, seeking, volume, brightness
+}
+
+struct PlayerGestureView: UIViewRepresentable {
+    var onTap: () -> Void
+    var onDoubleTap: () -> Void
+    var onLongPressBegan: () -> Void
+    var onLongPressEnded: () -> Void
+    var onLongPressSwipeDown: () -> Void
+    var onPanBegan: (GestureType) -> Void
+    var onPanChanged: (GestureType, CGPoint) -> Void
+    var onPanEnded: (GestureType) -> Void
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.numberOfTapsRequired = 1
+        
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        tap.require(toFail: doubleTap)
+        
+        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        longPress.minimumPressDuration = 0.5
+        
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
+        pan.maximumNumberOfTouches = 1
+        
+        view.addGestureRecognizer(tap)
+        view.addGestureRecognizer(doubleTap)
+        view.addGestureRecognizer(longPress)
+        view.addGestureRecognizer(pan)
+        
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var parent: PlayerGestureView
+        var currentPanType: GestureType = .none
+        var initialLongPressY: CGFloat = 0
+        
+        init(parent: PlayerGestureView) {
+            self.parent = parent
+        }
+        
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            if gesture.state == .ended { parent.onTap() }
+        }
+        
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            if gesture.state == .ended { parent.onDoubleTap() }
+        }
+        
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            let location = gesture.location(in: gesture.view)
+            switch gesture.state {
+            case .began:
+                initialLongPressY = location.y
+                parent.onLongPressBegan()
+            case .changed:
+                if location.y - initialLongPressY > 60 { // Swipe down to lock
+                    parent.onLongPressSwipeDown()
+                }
+            case .ended, .cancelled, .failed:
+                parent.onLongPressEnded()
+            default: break
+            }
+        }
+        
+        @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+            let translation = gesture.translation(in: gesture.view)
+            let velocity = gesture.velocity(in: gesture.view)
+            let location = gesture.location(in: gesture.view)
+            guard let view = gesture.view else { return }
+            
+            switch gesture.state {
+            case .began:
+                let isHorizontal = abs(velocity.x) > abs(velocity.y)
+                if isHorizontal {
+                    currentPanType = .seeking
+                } else {
+                    currentPanType = location.x < view.bounds.width / 2 ? .brightness : .volume
+                }
+                parent.onPanBegan(currentPanType)
+            case .changed:
+                parent.onPanChanged(currentPanType, translation)
+            case .ended, .cancelled, .failed:
+                parent.onPanEnded(currentPanType)
+                currentPanType = .none
+            default: break
+            }
+        }
+        
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            return false
+        }
+    }
+}
 
 // MARK: - PlayerView
-
 struct PlayerView: View {
     let file: VideoFileInfo
     let client: APIClient
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var player: AVPlayer?
-    @State private var timeObserver: Any?
-    @State private var duration: Double = 0
-    @State private var currentTime: Double = 0
-    @State private var isPlaying = false
-    @State private var showControls = true
-    @State private var isImmersive = true
+    @StateObject private var player: Player
+    @StateObject private var progressTracker = ProgressTracker(
+        interval: CMTime(seconds: 0.25, preferredTimescale: 600)
+    )
+
+    @State private var playbackState: PlaybackState = .idle
+    @State private var isBusy = false
+    @State private var buffer: Float = 0
+    @State private var currentSpeed: Float = 1
+    @State private var isCommandDeckVisible = true
     @State private var errorMessage: String?
+    
+    // Gestures States
+    @State private var showSeekHUD = false
+    @State private var seekTargetTime: CMTime = .zero
+    @State private var seekDeltaSeconds: Double = 0
+    
+    @State private var showVolumeHUD = false
+    @State private var initialVolume: Float = 0
+    @State private var currentVolume: Float = VolumeManager.shared.getVolume()
+    
+    @State private var showBrightnessHUD = false
+    @State private var initialBrightness: CGFloat = 0
+    @State private var currentBrightness: CGFloat = UIScreen.main.brightness
+    
+    @State private var isSpeedingUp = false
+    @State private var isSpeedLocked = false
+    @State private var showSpeedHUD = false
+    
+    let saveHistoryTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
-    // Speed
-    @State private var currentSpeed: Float = 1.0
+    private var thumbnailURL: URL? {
+        client.thumbnailURL(for: file)
+    }
 
-    // Swipe seek (accumulated per-gesture)
-    @State private var seekBaseTime: Double = 0
-    @State private var seekDelta: Double = 0
-    @State private var showSeekIndicator = false
+    private var isPlaying: Bool {
+        playbackState == .playing
+    }
 
-    // Volume / brightness swipe
-    @State private var showVolumeIndicator = false
-    @State private var currentSystemVolume: Float = 0
-    @State private var showBrightnessIndicator = false
-    @State private var currentBrightness: CGFloat = 0
+    init(file: VideoFileInfo, client: APIClient) {
+        self.file = file
+        self.client = client
 
-    // Long-press speed boost
-    @State private var speedBoosting = false
+        let configuration = PlayerConfiguration(
+            backwardSkipInterval: 15,
+            forwardSkipInterval: 15
+        )
 
-    // Controls auto-hide
-    @State private var controlsHideTask: Task<Void, Never>?
-    private let togglePiPSubject = PassthroughSubject<Void, Never>()
-
-    // Progress bar scrub state
-    @State private var isScrubbing = false
-
-    // Indicator 隐藏 Task（用于取消管理）
-    @State private var seekHideTask: Task<Void, Never>?
-    @State private var volumeHideTask: Task<Void, Never>?
-    @State private var brightnessHideTask: Task<Void, Never>?
+        if let url = client.playbackURL(for: file) {
+            let p = Player(item: .simple(url: url), configuration: configuration)
+            p.actionAtItemEnd = .pause
+            _player = StateObject(wrappedValue: p)
+            _errorMessage = State(initialValue: nil)
+        } else {
+            _player = StateObject(wrappedValue: Player())
+            _errorMessage = State(initialValue: "无法获取播放地址")
+        }
+    }
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            PlayerBackdrop(thumbnailURL: thumbnailURL, isPlaying: isPlaying)
+            
+            SystemVolumeView()
+                .frame(width: 0, height: 0)
 
-            if let player {
-                PlayerSurface(player: player, togglePiP: togglePiPSubject)
+            if errorMessage == nil {
+                VideoView(player: player)
+                    .gravity(.resizeAspect)
+                    .supportsPictureInPicture()
                     .ignoresSafeArea()
 
-                // Gesture layer — pure SwiftUI, no UIKit touch interception
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        togglePlay()
-                        revealControlsTemporarily()
+                PlayerVignette()
+                
+                PlayerGestureView(
+                    onTap: toggleCommandDeck,
+                    onDoubleTap: togglePlay,
+                    onLongPressBegan: {
+                        isSpeedingUp = true
+                        showSpeedHUD = true
+                        setSpeed(2.0)
+                    },
+                    onLongPressEnded: {
+                        if !isSpeedLocked {
+                            isSpeedingUp = false
+                            showSpeedHUD = false
+                            setSpeed(currentSpeed) // Revert to set speed
+                        } else {
+                            // If locked, hide the hint after a short delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                withAnimation { showSpeedHUD = false }
+                            }
+                        }
+                    },
+                    onLongPressSwipeDown: {
+                        let impact = UIImpactFeedbackGenerator(style: .medium)
+                        impact.impactOccurred()
+                        if isSpeedLocked {
+                            // Unlock: revert speed and dismiss
+                            isSpeedLocked = false
+                            isSpeedingUp = false
+                            showSpeedHUD = false
+                            setSpeed(1.0)
+                        } else {
+                            isSpeedLocked = true
+                        }
+                    },
+                    onPanBegan: handlePanBegan,
+                    onPanChanged: handlePanChanged,
+                    onPanEnded: handlePanEnded
+                )
+
+                PlayerHUDLayer()
+
+                // Replay overlay when video ends
+                if playbackState == .ended {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                    
+                    Button(action: { player.replay() }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 40, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 80, height: 80)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 1))
                     }
-                    .onTapGesture(count: 1) {
-                        toggleControls()
-                    }
-                    .gesture(tapAndSwipeGesture)
-                    .gesture(longPressBoostGesture)
-
-                // Seek indicator
-                if showSeekIndicator {
-                    SeekDeltaIndicator(delta: seekDelta, targetTime: currentTime, valueFormatter: formatTime)
-                        .transition(.opacity)
-                        .allowsHitTesting(false)
+                    .buttonStyle(PressableButtonStyle())
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
                 }
 
-                // Volume indicator
-                if showVolumeIndicator {
-                    VolumeIndicator(volume: currentSystemVolume)
-                        .transition(.opacity)
-                        .allowsHitTesting(false)
-                }
+                VStack(spacing: 0) {
+                    PlayerTopChrome(
+                        title: file.name,
+                        subtitle: file.sizeFormatted,
+                        dismiss: closePlayer,
+                        togglePiP: startPictureInPicture
+                    )
+                    .opacity(isCommandDeckVisible ? 1 : 0)
 
-                // Brightness indicator
-                if showBrightnessIndicator {
-                    BrightnessIndicator(brightness: currentBrightness)
-                        .transition(.opacity)
-                        .allowsHitTesting(false)
-                }
+                    Spacer(minLength: 0)
 
-                if showControls {
-                    controlsLayer
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    PlayerBottomControls(
+                        player: player,
+                        progressTracker: progressTracker,
+                        playbackState: playbackState,
+                        isBusy: isBusy,
+                        buffer: buffer,
+                        currentSpeed: currentSpeed,
+                        formatTime: formatTime,
+                        togglePlay: togglePlay,
+                        setSpeed: {
+                            if showSpeedHUD {
+                                isSpeedLocked = false
+                            }
+                            self.setSpeed($0)
+                        }
+                    )
+                    .opacity(isCommandDeckVisible ? 1 : 0)
                 }
+                .padding(.horizontal, 24)
+                .padding(.top, 0)
+                .padding(.bottom, 8)
             } else if let errorMessage {
-                ContentUnavailableView("无法播放", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-                    .foregroundStyle(.white)
-                    .padding()
-            } else {
-                VStack(spacing: 14) {
-                    ProgressView()
-                        .tint(.white)
-                    Text("准备播放…")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.72))
-                }
+                PlayerErrorState(message: errorMessage, dismiss: closePlayer)
+                    .padding(24)
             }
+        }
+        .bind(progressTracker, to: player)
+        .onReceive(player: player, assign: \.playbackState, to: $playbackState)
+        .onReceive(player: player, assign: \.isBusy, to: $isBusy)
+        .onReceive(player: player, assign: \.buffer, to: $buffer)
+        .onReceive(player.$error.compactMap { $0?.localizedDescription }) { errorMessage = $0 }
+        .onReceive(saveHistoryTimer) { _ in
+            if isPlaying { saveHistory() }
         }
         .preferredColorScheme(.dark)
-        .statusBarHidden(isImmersive)
-        .task {
-            currentSystemVolume = AVAudioSession.sharedInstance().outputVolume
-            currentBrightness = UIScreen.main.brightness
-            await preparePlayer()
+        .statusBarHidden(true)
+        .task(preparePlayer)
+        .onDisappear {
+            saveHistory()
+            stopPlayer()
         }
-        .onDisappear { cleanupPlayer() }
-        .animation(.easeInOut(duration: 0.22), value: showControls)
-        .animation(.easeInOut(duration: 0.15), value: showSeekIndicator)
-        .animation(.easeInOut(duration: 0.15), value: showVolumeIndicator)
-        .animation(.easeInOut(duration: 0.15), value: showBrightnessIndicator)
+        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isCommandDeckVisible)
+        .animation(.spring(response: 0.3, dampingFraction: 0.78), value: playbackState)
+        .sensoryFeedback(.impact(weight: .light), trigger: playbackState)
     }
-
-    // MARK: - SwiftUI Gestures
-
-    /// Tap + swipe gesture. Tap for play/pause/controls, swipe for seek/volume/brightness.
-    private var tapAndSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                controlsHideTask?.cancel()
-                let absX = abs(value.translation.width)
-                let absY = abs(value.translation.height)
-
-                if absX > absY {
-                    // Horizontal → seek: compute delta from accumulated translation
-                    if !showSeekIndicator { seekBaseTime = currentTime }
-                    let span = horizontalSeekSpan()
-                    let frac = Double(value.translation.width / max(UIScreen.main.bounds.width, 1))
-                    let target = clampedTime(seekBaseTime + frac * span)
-                    currentTime = target
-                    seekDelta = target - seekBaseTime
-                    showSeekIndicator = true
-                    withAnimation(.easeInOut(duration: 0.18)) { showControls = true }
-                } else {
-                    // Vertical → volume (right side) / brightness (left side)
-                    let locationX = value.startLocation.x
-                    let viewWidth = UIScreen.main.bounds.width
-                    let step = value.translation.height
-                    if locationX > viewWidth / 2 {
-                        let volumeChange = Float(-step) * 0.004
-                        let newVol = min(max(currentSystemVolume + volumeChange, 0), 1)
-                        setSystemVolume(newVol)
-                        currentSystemVolume = newVol
-                        showVolumeIndicator = true
-                        hideVolumeIndicatorSoon()
-                    } else {
-                        let brightnessChange = CGFloat(-step) * 0.004
-                        let newBright = min(max(currentBrightness + brightnessChange, 0), 1)
-                        UIScreen.main.brightness = newBright
-                        currentBrightness = newBright
-                        showBrightnessIndicator = true
-                        hideBrightnessIndicatorSoon()
-                    }
-                }
-            }
-            .onEnded { value in
-                let absX = abs(value.translation.width)
-                let absY = abs(value.translation.height)
-
-                if absX > absY {
-                    // Commit seek
-                    let span = horizontalSeekSpan()
-                    let frac = Double(value.translation.width / max(UIScreen.main.bounds.width, 1))
-                    let target = clampedTime(seekBaseTime + frac * span)
-                    seek(to: target)
-                    hideSeekIndicatorSoon()
-                } else {
-                    scheduleControlsAutoHide()
-                }
-            }
-    }
-
-    /// Long press → temporary 2x speed boost while held.
-    private var longPressBoostGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.35)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                switch value {
-                case .second(true, _):
-                    // Long press active
-                    if !speedBoosting {
-                        speedBoosting = true
-                        guard let player else { return }
-                        player.playImmediately(atRate: 2)
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    }
-                case .first, .second(false, _):
-                    break
-                }
-            }
-            .onEnded { _ in
-                if speedBoosting {
-                    speedBoosting = false
-                    guard let player else { return }
-                    if isPlaying {
-                        player.rate = currentSpeed
-                    } else {
-                        player.pause()
-                    }
-                }
-            }
-    }
-
-    // MARK: - Controls Layer
-
-    private var controlsLayer: some View {
-        VStack(spacing: 0) {
-            topBar
-            Spacer(minLength: 0)
-            bottomControls
+    
+    // MARK: - Gesture Methods
+    private func handlePanBegan(_ type: GestureType) {
+        switch type {
+        case .seeking:
+            showSeekHUD = true
+            seekTargetTime = progressTracker.time
+            seekDeltaSeconds = 0
+            progressTracker.isInteracting = true
+        case .volume:
+            showVolumeHUD = true
+            initialVolume = VolumeManager.shared.getVolume()
+            currentVolume = initialVolume
+        case .brightness:
+            showBrightnessHUD = true
+            initialBrightness = UIScreen.main.brightness
+            currentBrightness = initialBrightness
+        case .none: break
         }
-        .ignoresSafeArea(edges: isImmersive ? .all : [])
     }
-
-    private var topBar: some View {
-        HStack(spacing: 12) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-            .buttonStyle(.plain)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(file.name)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                    .foregroundStyle(.white)
-                Text(file.sizeFormatted)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.55))
-            }
-
-            Spacer()
-
-            Button {
-                togglePiPSubject.send()
-                scheduleControlsAutoHide()
-            } label: {
-                Image(systemName: "pip.enter")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-            .buttonStyle(.plain)
+    
+    private func handlePanChanged(_ type: GestureType, translation: CGPoint) {
+        switch type {
+        case .seeking:
+            let width = UIScreen.main.bounds.width
+            seekDeltaSeconds = Double(translation.x / width) * 90.0
+            seekTargetTime = CMTimeAdd(progressTracker.time, CMTime(seconds: seekDeltaSeconds, preferredTimescale: 600))
+            if seekTargetTime < .zero { seekTargetTime = .zero }
+            if seekTargetTime > progressTracker.timeRange.duration { seekTargetTime = progressTracker.timeRange.duration }
+        case .volume:
+            let delta = Float(-translation.y / 200.0)
+            var newVol = initialVolume + delta
+            newVol = max(0, min(1, newVol))
+            currentVolume = newVol
+            VolumeManager.shared.setVolume(newVol)
+        case .brightness:
+            let delta = CGFloat(-translation.y / 200.0)
+            var newBright = initialBrightness + delta
+            newBright = max(0, min(1, newBright))
+            currentBrightness = newBright
+            UIScreen.main.brightness = newBright
+        case .none: break
         }
-        .padding(.horizontal, 18)
-        .padding(.top, isImmersive ? 56 : 18)
-        .padding(.bottom, 48)
-        .background(
-            LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
-                .allowsHitTesting(false)
-        )
+    }
+    
+    private func handlePanEnded(_ type: GestureType) {
+        switch type {
+        case .seeking:
+            showSeekHUD = false
+            player.seek(to: seekTargetTime)
+            progressTracker.isInteracting = false
+        case .volume:
+            showVolumeHUD = false
+        case .brightness:
+            showBrightnessHUD = false
+        case .none: break
+        }
     }
 
-    private var bottomControls: some View {
-        VStack(spacing: 20) {
-            // Progress bar
-            progressBar
-
-            // Time labels + buttons
-            HStack(spacing: 14) {
-                Text(formatTime(currentTime))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.7))
-                    .frame(width: 46, alignment: .leading)
-
+    // MARK: - HUD Layer
+    @ViewBuilder
+    private func PlayerHUDLayer() -> some View {
+        ZStack {
+            // Top HUDs (Volume, Brightness, Seek)
+            VStack {
+                if showSeekHUD {
+                    SeekHUD(time: seekTargetTime, delta: seekDeltaSeconds, totalTime: progressTracker.timeRange.duration)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                } else if showVolumeHUD {
+                    ValueHUD(icon: "speaker.wave.3.fill", value: CGFloat(currentVolume))
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                } else if showBrightnessHUD {
+                    ValueHUD(icon: "sun.max.fill", value: currentBrightness)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 Spacer()
-
-                // Skip back 10s
-                ControlPillButton(
-                    icon: "gobackward.10",
-                    size: 18,
-                    action: { seek(by: -10); UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-                )
-
-                // Play/pause
-                ControlPillButton(
-                    icon: isPlaying ? "pause.fill" : "play.fill",
-                    size: 22,
-                    isProminent: true,
-                    action: { togglePlay(); UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-                )
-
-                // Skip forward 10s
-                ControlPillButton(
-                    icon: "goforward.10",
-                    size: 18,
-                    action: { seek(by: 10); UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-                )
-
-                Spacer()
-
-                Text(formatTime(duration))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.55))
-                    .frame(width: 46, alignment: .trailing)
             }
-
-            // Speed + hints
-            HStack {
-                Menu {
-                    ForEach(speedPresets, id: \.self) { speed in
-                        Button {
-                            setSpeed(speed)
-                        } label: {
-                            HStack {
-                                Text(String(format: "%.2gx", speed))
-                                if currentSpeed == speed {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "speedometer")
-                            .font(.system(size: 11))
-                        Text(String(format: "%.2gx", currentSpeed))
-                            .monospacedDigit()
-                            .font(.caption2.weight(.medium))
-                    }
-                    .foregroundStyle(.white.opacity(0.65))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(.ultraThinMaterial, in: Capsule())
-                }
-
+            .padding(.top, 48)
+            
+            // Bottom HUDs (Speed)
+            VStack {
                 Spacer()
-
-                Text("滑动调整进度 · 左侧亮度 · 右侧音量")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.35))
-            }
-        }
-        .padding(.horizontal, 22)
-        .padding(.top, 48)
-        .padding(.bottom, isImmersive ? 36 : 18)
-        .background(
-            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
-                .allowsHitTesting(false)
-        )
-    }
-
-    // MARK: - Progress Bar
-
-    private var progressBar: some View {
-        let clampedDuration = max(duration, 1)
-        let progress = clampedDuration > 0 ? min(max(currentTime / clampedDuration, 0), 1) : 0
-
-        return GeometryReader { geometry in
-            let width = geometry.size.width
-            let usableWidth = max(width, 1)
-            let thumbX = usableWidth * progress
-            let trackHeight: CGFloat = isScrubbing ? 8 : 4
-
-            ZStack(alignment: .leading) {
-                // Background track
-                Capsule()
-                    .fill(.white.opacity(0.15))
-                    .frame(height: trackHeight)
-
-                // Active track with gradient
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 1, green: 0.18, blue: 0.22),
-                                Color(red: 1, green: 0.45, blue: 0.18),
-                                Color(red: 1, green: 0.73, blue: 0.22),
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: max(0, thumbX), height: trackHeight)
-
-                // Thumb — only visible when scrubbing
-                if isScrubbing {
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 22, height: 22)
-                        .overlay(Circle().stroke(.black.opacity(0.12), lineWidth: 0.5))
-                        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
-                        .position(x: thumbX, y: geometry.size.height / 2)
+                if showSpeedHUD {
+                    SpeedHUDView(isSpeedLocked: isSpeedLocked)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle().inset(by: -20)) // expand hit area
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { gesture in
-                        if !isScrubbing {
-                            isScrubbing = true
-                            controlsHideTask?.cancel()
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                showControls = true
-                            }
-                        }
-                        let p = min(max(gesture.location.x / usableWidth, 0), 1)
-                        currentTime = clampedDuration * p
-                    }
-                    .onEnded { gesture in
-                        let p = min(max(gesture.location.x / usableWidth, 0), 1)
-                        let target = clampedDuration * p
-                        currentTime = target
-                        seek(to: target)
-                        isScrubbing = false
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        scheduleControlsAutoHide()
-                    }
-            )
-            .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isScrubbing)
-            .animation(.spring(response: 0.24, dampingFraction: 0.78), value: trackHeight)
+            .padding(.bottom, 60)
         }
-        .frame(height: 40)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showSeekHUD)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showVolumeHUD)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showBrightnessHUD)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showSpeedHUD)
+        .allowsHitTesting(false)
     }
 
-    // MARK: - Player Logic
-
-    private func preparePlayer() async {
-        guard player == nil else { return }
-        guard let url = client.playbackURL(for: file) else {
-            errorMessage = "无法获取播放地址"
+    // MARK: - Actions
+    func preparePlayer() async {
+        guard errorMessage == nil else { return }
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            errorMessage = "音频会话启动失败"
             return
         }
-
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
-        try? AVAudioSession.sharedInstance().setActive(true)
-
-        let item = AVPlayerItem(url: url)
-        let freshPlayer = AVPlayer(playerItem: item)
-        player = freshPlayer
-        installTimeObserver(for: freshPlayer)
-        freshPlayer.play()
-        isPlaying = true
-        scheduleControlsAutoHide()
+        player.becomeActive()
+        player.play()
     }
 
-    private func installTimeObserver(for player: AVPlayer) {
-        if let timeObserver {
-            self.player?.removeTimeObserver(timeObserver)
-            self.timeObserver = nil
-        }
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { time in
-            if !isScrubbing, time.seconds.isFinite {
-                currentTime = time.seconds
-            }
-            if let seconds = player.currentItem?.duration.seconds, seconds.isFinite {
-                duration = seconds
-            }
-            isPlaying = player.timeControlStatus == .playing
-        }
+    func stopPlayer() {
+        player.pause()
+        player.resignActive()
     }
 
-    private func cleanupPlayer() {
-        controlsHideTask?.cancel()
-        controlsHideTask = nil
-        if let timeObserver {
-            player?.removeTimeObserver(timeObserver)
-            self.timeObserver = nil
-        }
-        player?.pause()
-        player = nil
+    func closePlayer() {
+        saveHistory()
+        PictureInPicture.shared.close()
+        stopPlayer()
+        dismiss()
+    }
+    
+    func saveHistory() {
+        let position = progressTracker.time.seconds
+        let duration = progressTracker.timeRange.duration.seconds
+        guard position.isFinite, duration.isFinite, duration > 0 else { return }
+        
+        let path = file.relPath
+        let name = file.name
+        
+        LocalHistoryManager.shared.saveHistory(
+            videoPath: path,
+            videoName: name,
+            positionSeconds: position,
+            durationSeconds: duration
+        )
     }
 
-    private func togglePlay() {
-        guard let player else { return }
-        if player.timeControlStatus == .playing {
-            player.pause()
-            isPlaying = false
-            controlsHideTask?.cancel()
+    func togglePlay() {
+        if playbackState == .ended || player.canReplay() {
+            player.replay()
         } else {
-            player.play()
-            if currentSpeed != 1.0 { player.rate = currentSpeed }
-            isPlaying = true
-            scheduleControlsAutoHide()
+            player.togglePlayPause()
         }
     }
 
-    private func toggleControls() {
-        withAnimation(.easeInOut(duration: 0.22)) {
-            showControls.toggle()
-        }
-        if showControls {
-            scheduleControlsAutoHide()
-        } else {
-            controlsHideTask?.cancel()
-        }
+    func toggleCommandDeck() {
+        isCommandDeckVisible.toggle()
     }
 
-    private func revealControlsTemporarily() {
-        withAnimation(.easeInOut(duration: 0.18)) {
-            showControls = true
-        }
-        scheduleControlsAutoHide()
+    func startPictureInPicture() {
+        PictureInPicture.shared.startIfPossible()
     }
 
-    private func scheduleControlsAutoHide() {
-        controlsHideTask?.cancel()
-        guard isPlaying else { return }
-        controlsHideTask = Task {
-            try? await Task.sleep(for: .seconds(3))
-            if !Task.isCancelled {
-                await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showControls = false
-                    }
-                }
-            }
-        }
-    }
-
-    private func seek(by offset: Double) {
-        seek(to: clampedTime(currentTime + offset))
-    }
-
-    private func seek(to seconds: Double) {
-        guard let player else { return }
-        let clamped = clampedTime(seconds)
-        currentTime = clamped
-        let target = CMTime(seconds: clamped, preferredTimescale: 600)
-        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
-        scheduleControlsAutoHide()
-    }
-
-    private func clampedTime(_ seconds: Double) -> Double {
-        min(max(seconds, 0), max(duration, 0))
-    }
-
-    private func horizontalSeekSpan() -> Double {
-        guard duration > 0 else { return 60 }
-        return min(max(duration * 0.04, 45), 180)
-    }
-
-    private func setSpeed(_ speed: Float) {
+    func setSpeed(_ speed: Float) {
         currentSpeed = speed
-        guard let player else { return }
-        if player.timeControlStatus == .playing {
-            player.rate = speed
-        }
+        player.playbackSpeed = speed
     }
 
-    private func setSystemVolume(_ volume: Float) {
-        Task { @MainActor in
-            SystemVolumeController.shared.setVolume(volume)
-        }
+    func formatTime(_ time: CMTime) -> String {
+        formatTime(time.seconds)
     }
 
-    private func hideSeekIndicatorSoon() {
-        seekHideTask?.cancel()
-        seekHideTask = Task {
-            try? await Task.sleep(for: .milliseconds(700))
-            if !Task.isCancelled {
-                await MainActor.run { showSeekIndicator = false }
-            }
-        }
-    }
-
-    private func hideVolumeIndicatorSoon() {
-        volumeHideTask?.cancel()
-        volumeHideTask = Task {
-            try? await Task.sleep(for: .milliseconds(650))
-            if !Task.isCancelled {
-                await MainActor.run {
-                    showVolumeIndicator = false
-                    scheduleControlsAutoHide()
-                }
-            }
-        }
-    }
-
-    private func hideBrightnessIndicatorSoon() {
-        brightnessHideTask?.cancel()
-        brightnessHideTask = Task {
-            try? await Task.sleep(for: .milliseconds(650))
-            if !Task.isCancelled {
-                await MainActor.run {
-                    showBrightnessIndicator = false
-                    scheduleControlsAutoHide()
-                }
-            }
-        }
-    }
-
-    private func formatTime(_ seconds: Double) -> String {
+    func formatTime(_ seconds: Double) -> String {
         guard seconds.isFinite && seconds >= 0 else { return "00:00" }
         let total = Int(seconds.rounded())
         let hours = total / 3600
         let minutes = (total % 3600) / 60
-        let secs = total % 60
+        let remainingSeconds = total % 60
+
         if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+            return String(format: "%d:%02d:%02d", hours, minutes, remainingSeconds)
         }
-        return String(format: "%02d:%02d", minutes, secs)
+        return String(format: "%02d:%02d", minutes, remainingSeconds)
     }
 }
 
-// MARK: - Control Pill Button
+// MARK: - HUD Views
+private struct SeekHUD: View {
+    let time: CMTime
+    let delta: Double
+    let totalTime: CMTime
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(delta >= 0 ? ">>" : "<<")
+                .font(.subheadline.weight(.bold))
+            HStack(spacing: 4) {
+                Text(formatTime(time))
+                    .foregroundStyle(Color(red: 0.12, green: 0.86, blue: 0.78))
+                Text("/")
+                    .foregroundStyle(.white.opacity(0.6))
+                Text(formatTime(totalTime))
+            }
+            .font(.subheadline.monospacedDigit().weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+    
+    func formatTime(_ time: CMTime) -> String {
+        guard time.seconds.isFinite && time.seconds >= 0 else { return "00:00" }
+        let total = Int(time.seconds.rounded())
+        let m = (total % 3600) / 60
+        let s = total % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+}
 
-private struct ControlPillButton: View {
+private struct ValueHUD: View {
     let icon: String
-    var size: CGFloat = 18
-    var isProminent: Bool = false
-    let action: () -> Void
+    let value: CGFloat
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+            
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(.white.opacity(0.2))
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(.white)
+                            .frame(width: proxy.size.width * value)
+                    }
+            }
+            .frame(width: 80, height: 4)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+}
 
+private struct SpeedHUDView: View {
+    let isSpeedLocked: Bool
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: isSpeedLocked ? "lock.fill" : "chevron.down")
+                .font(.system(size: 14))
+            
+            Text(isSpeedLocked ? "已锁定 2 倍速" : "下滑松手锁定 2 倍速")
+                .font(.subheadline.weight(.medium))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.6), in: Capsule())
+    }
+}
+
+// MARK: - UI Components
+private struct PlayerBottomControls: View {
+    @ObservedObject var player: Player
+    @ObservedObject var progressTracker: ProgressTracker
+
+    let playbackState: PlaybackState
+    let isBusy: Bool
+    let buffer: Float
+    let currentSpeed: Float
+    let formatTime: (CMTime) -> String
+    let togglePlay: () -> Void
+    let setSpeed: (Float) -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            PlayerTimeline(
+                progressTracker: progressTracker,
+                buffer: buffer,
+                formatTime: formatTime
+            )
+            
+            HStack {
+                Button(action: togglePlay) {
+                    Image(systemName: playbackState == .playing ? "pause.fill" : "play.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableButtonStyle())
+                
+                Spacer()
+                
+                SpeedMenu(player: player, currentSpeed: currentSpeed, setSpeed: setSpeed)
+            }
+        }
+    }
+}
+
+private struct PlayerTimeline: View {
+    @ObservedObject var progressTracker: ProgressTracker
+    let buffer: Float
+    let formatTime: (CMTime) -> String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(formatTime(progressTracker.time))
+                .font(.caption2.monospacedDigit().weight(.medium))
+                .foregroundStyle(.white.opacity(0.8))
+            
+            ZStack(alignment: .leading) {
+                GeometryReader { geometry in
+                    Capsule()
+                        .fill(.white.opacity(0.2))
+                        .frame(height: 3)
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(.white.opacity(0.4))
+                                .frame(width: geometry.size.width * CGFloat(buffer), height: 3)
+                        }
+                        .frame(maxHeight: .infinity)
+                }
+
+                Slider(progressTracker: progressTracker)
+                    .tint(Color(red: 0.12, green: 0.86, blue: 0.78))
+                    .disabled(!progressTracker.isProgressAvailable)
+                    .scaleEffect(y: 0.8) // Sleeker slider
+            }
+            .frame(height: 24)
+            
+            Text(formatTime(progressTracker.timeRange.duration))
+                .font(.caption2.monospacedDigit().weight(.medium))
+                .foregroundStyle(.white.opacity(0.8))
+        }
+    }
+}
+
+private struct SpeedMenu: View {
+    @ObservedObject var player: Player
+    let currentSpeed: Float
+    let setSpeed: (Float) -> Void
+    private let speeds: [Float] = [0.75, 1, 1.25, 1.5, 2]
+
+    var body: some View {
+        Menu {
+            ForEach(speeds, id: \.self) { speed in
+                Button {
+                    setSpeed(speed)
+                } label: {
+                    Label(speedLabel(speed), systemImage: currentSpeed == speed ? "checkmark" : "")
+                }
+                .disabled(!player.playbackSpeedRange.contains(speed))
+            }
+        } label: {
+            Text(speedLabel(currentSpeed))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+
+    private func speedLabel(_ speed: Float) -> String {
+        String(format: "%.2gx", speed)
+    }
+}
+
+private struct PlayerTopChrome: View {
+    let title: String
+    let subtitle: String
+    let dismiss: () -> Void
+    let togglePiP: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            IconButton(systemName: "chevron.left", action: dismiss)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(.white)
+                Text(subtitle)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            Spacer()
+            IconButton(systemName: "pip.enter", action: togglePiP)
+        }
+        .padding(.top, 8)
+    }
+}
+
+private struct IconButton: View {
+    let systemName: String
+    let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: size, weight: isProminent ? .semibold : .medium))
-                .foregroundStyle(isProminent ? .black : .white)
-                .frame(
-                    width: isProminent ? 52 : 40,
-                    height: isProminent ? 52 : 40
-                )
-                .background(
-                    isProminent
-                        ? AnyShapeStyle(.white)
-                        : AnyShapeStyle(.ultraThinMaterial)
-                )
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(.white.opacity(isProminent ? 0 : 0.12), lineWidth: 0.5)
-                )
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(.white.opacity(0.1), in: Circle())
         }
-        .buttonStyle(.plain)
-        .scaleButtonOnPress()
+        .buttonStyle(PressableButtonStyle())
     }
 }
 
-// MARK: - Scale Button Modifier
-
-private struct ScaleButtonStyle: ViewModifier {
-    @State private var pressed = false
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(pressed ? 0.92 : 1)
-            .animation(.spring(response: 0.22, dampingFraction: 0.7), value: pressed)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in pressed = true }
-                    .onEnded { _ in pressed = false }
-            )
+private struct PressableButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
-extension View {
-    func scaleButtonOnPress() -> some View {
-        modifier(ScaleButtonStyle())
-    }
-}
-
-// MARK: - Player Surface
-
-private struct PlayerSurface: UIViewRepresentable {
-    let player: AVPlayer
-    let togglePiP: PassthroughSubject<Void, Never>
-
-    func makeUIView(context: Context) -> PlayerSurfaceView {
-        let view = PlayerSurfaceView()
-        view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspect
-        view.setupPiP(togglePiP: togglePiP)
-        return view
-    }
-
-    func updateUIView(_ uiView: PlayerSurfaceView, context: Context) {
-        uiView.playerLayer.player = player
-    }
-}
-
-private final class PlayerSurfaceView: UIView {
-    override class var layerClass: AnyClass { AVPlayerLayer.self }
-    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
-
-    private var pipController: AVPictureInPictureController?
-    private var pipCancellable: AnyCancellable?
-
-    func setupPiP(togglePiP: PassthroughSubject<Void, Never>) {
-        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
-        pipController = AVPictureInPictureController(playerLayer: playerLayer)
-        pipController?.canStartPictureInPictureAutomaticallyFromInline = true
-        pipCancellable = togglePiP.sink { [weak self] in
-            guard let pip = self?.pipController else { return }
-            if pip.isPictureInPictureActive {
-                pip.stopPictureInPicture()
-            } else {
-                pip.startPictureInPicture()
-            }
-        }
-    }
-
-    deinit {
-        pipCancellable?.cancel()
-    }
-}
-
-// MARK: - Seek Delta Indicator
-
-private struct SeekDeltaIndicator: View {
-    let delta: Double
-    let targetTime: Double
-    let valueFormatter: (Double) -> String
-
+// MARK: - Backdrops & Extras
+private struct PlayerBackdrop: View {
+    let thumbnailURL: URL?
+    let isPlaying: Bool
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: delta > 0 ? "goforward" : "gobackward")
-                .font(.system(size: 25, weight: .semibold))
-            Text("\(delta > 0 ? "+" : "")\(Int(delta.rounded()))s")
-                .font(.title3.monospacedDigit().bold())
-            Text(valueFormatter(targetTime))
-                .font(.caption.monospacedDigit().weight(.medium))
-                .foregroundStyle(.white.opacity(0.72))
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 22)
-        .padding(.vertical, 16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.12), lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 12)
-        .allowsHitTesting(false)
-    }
-}
-
-// MARK: - Volume Indicator
-
-private struct VolumeIndicator: View {
-    let volume: Float
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: volume <= 0 ? "speaker.slash.fill" : volume < 0.33 ? "speaker.wave.1.fill" : volume < 0.66 ? "speaker.wave.2.fill" : "speaker.wave.3.fill")
-                .font(.system(size: 16))
-                .frame(width: 24)
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.2))
-                    Capsule().fill(.white).frame(width: geo.size.width * CGFloat(volume))
+        ZStack {
+            Color.black.ignoresSafeArea()
+            AsyncImage(url: thumbnailURL) { phase in
+                if case .success(let image) = phase {
+                    image.resizable().scaledToFill().blur(radius: 40).opacity(0.4)
                 }
             }
-            .frame(width: 120, height: 4)
+            .ignoresSafeArea()
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.3), radius: 12)
-        .allowsHitTesting(false)
     }
 }
 
-// MARK: - Brightness Indicator
-
-private struct BrightnessIndicator: View {
-    let brightness: CGFloat
-
+private struct PlayerVignette: View {
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "sun.max.fill")
-                .font(.system(size: 16))
-                .frame(width: 24)
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.2))
-                    Capsule().fill(.white).frame(width: geo.size.width * brightness)
-                }
-            }
-            .frame(width: 120, height: 4)
+        VStack {
+            LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: 120)
+            Spacer()
+            LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 160)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.3), radius: 12)
+        .ignoresSafeArea()
         .allowsHitTesting(false)
     }
 }
 
-// MARK: - System Volume
-
-@MainActor
-private final class SystemVolumeController {
-    static let shared = SystemVolumeController()
-
-    private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
-    private weak var slider: UISlider?
-    private var isInstalled = false
-
-    private init() {
-        volumeView.alpha = 0.01
-        volumeView.isUserInteractionEnabled = false
-    }
-
-    func setVolume(_ volume: Float) {
-        let normalizedVolume = min(max(volume, 0), 1)
-        installIfNeeded()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(10))
-            let slider = self.slider ?? self.findSlider()
-            slider?.setValue(normalizedVolume, animated: false)
-            slider?.sendActions(for: .valueChanged)
+private struct PlayerErrorState: View {
+    let message: String
+    let dismiss: () -> Void
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 38, weight: .semibold))
+                .foregroundStyle(.orange)
+            Text("无法播放").font(.title3.weight(.bold)).foregroundStyle(.white)
+            Text(message).font(.subheadline).foregroundStyle(.white.opacity(0.68))
+            Button("退出", action: dismiss)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 11)
+                .background(.white, in: Capsule())
         }
-    }
-
-    private func installIfNeeded() {
-        guard !isInstalled else { return }
-        guard let windowScene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }),
-              let window = windowScene.windows.first(where: { $0.isKeyWindow }) ?? windowScene.windows.first
-        else { return }
-
-        window.addSubview(volumeView)
-        slider = findSlider()
-        isInstalled = true
-    }
-
-    private func findSlider() -> UISlider? {
-        if let slider = volumeView.subviews.first(where: { $0 is UISlider }) as? UISlider {
-            self.slider = slider
-            return slider
-        }
-        return nil
+        .padding(24)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }

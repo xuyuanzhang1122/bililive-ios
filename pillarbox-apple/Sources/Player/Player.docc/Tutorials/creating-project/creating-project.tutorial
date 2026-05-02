@@ -1,0 +1,53 @@
+@Tutorial(time: 5) {
+    @Intro(title: "Creating a project") {
+        Learn how to set up a new project with PillarboxPlayer as a Swift Package dependency.
+        
+        @Image(source: creating-project-intro, alt: "An image illustrating a settings gear.")
+    }
+    
+    @Section(title: "Create a new project") {
+        @ContentAndMedia {
+            Set up and configure an Xcode project from scratch.
+        }
+        
+        @Steps {
+            @Step {
+                Launch Xcode. In the startup window, click **Create New Project**, or navigate to **File > New > Project**.
+
+                @Image(source: creating-project-1-1, alt: "A screenshot showing the Xcode splash screen with the option to create a new project.")
+            }
+            
+            @Step {
+                In the template selector, choose **iOS** as the platform, select the **App** template, and click **Next**.
+
+                @Image(source: creating-project-1-2, alt: "A screenshot of the Xcode project template selection screen.")
+            }
+            
+            @Step {
+                Enter **Tutorial** as the product name. For the interface, select **SwiftUI**, and for the language, choose **Swift**. Click **Next** and choose a location on your Mac to save the project.
+
+                @Image(source: creating-project-1-3, alt: "A screenshot showing the Xcode project configuration details.")
+            }
+        }
+    }
+        
+    @Section(title: "Add the player dependency") {
+        @ContentAndMedia {
+            Integrate PillarboxPlayer into your project as a Swift Package dependency.
+        }
+        
+        @Steps {
+            @Step {
+                In Xcode, go to **File > Add Package Dependencies**. Search for the repository URL: [https://github.com/SRGSSR/pillarbox-apple.git](https://github.com/SRGSSR/pillarbox-apple.git). Click **Add Package**.
+
+                @Image(source: creating-project-2-1, alt: "A screenshot showing the Xcode interface for adding a package dependency.")
+            }
+            
+            @Step {
+                In the package configuration screen, ensure only **PillarboxPlayer** is added as a dependency to the **Tutorial** app.
+
+                @Image(source: creating-project-2-2, alt: "A screenshot showing the Xcode interface for selecting package products.")
+            }
+        }
+    }
+}

@@ -75,6 +75,12 @@ private struct RoomCard: View {
                         
                         img.resizable()
                             .aspectRatio(contentMode: .fit)
+                        
+                        // Play Icon Overlay
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .shadow(color: .black.opacity(0.5), radius: 4)
                     }
                     .aspectRatio(16/9, contentMode: .fill)
                 case .failure:
@@ -85,31 +91,47 @@ private struct RoomCard: View {
             }
             .frame(maxWidth: .infinity)
             .clipped()
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(room.hostName).font(.headline).lineLimit(1)
+            
+            // Bottom Info Container with slight blur
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(room.hostName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
                     if room.recording {
-                        Text("直播中")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.red, in: RoundedRectangle(cornerRadius: 4))
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 6, height: 6)
+                            Text("直播中")
+                        }
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.red.opacity(0.8), in: Capsule())
                     }
                 }
+                
                 HStack {
-                    Text("\(room.videoCount) 个视频").font(.caption).foregroundStyle(.secondary)
+                    Label("\(room.videoCount) 视频", systemImage: "film")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    
                     Spacer()
-                    Text(room.totalSizeFormatted).font(.caption).foregroundStyle(.secondary)
+                    
+                    Text(room.totalSizeFormatted)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.tertiary)
                 }
             }
-            .padding(8)
+            .padding(12)
         }
         .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
     }
 
     private var thumbnailURL: URL? {

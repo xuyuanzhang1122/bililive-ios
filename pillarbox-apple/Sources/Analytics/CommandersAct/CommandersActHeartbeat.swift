@@ -1,0 +1,99 @@
+//
+//  Copyright (c) SRG SSR. All rights reserved.
+//
+//  License information is available from the LICENSE file.
+//
+
+import Combine
+import Foundation
+import PillarboxPlayer
+
+final class CommandersActHeartbeat {
+    private let delay: TimeInterval
+    private let posInterval: TimeInterval
+    private let uptimeInterval: TimeInterval
+    private let queue: DispatchQueue
+
+    private var properties: TrackerProperties?
+    private var cancellable: AnyCancellable?
+
+    init(delay: TimeInterval = 30, posInterval: TimeInterval = 30, uptimeInterval: TimeInterval = 60, queue: DispatchQueue) {
+        self.delay = delay
+        self.posInterval = posInterval
+        self.uptimeInterval = uptimeInterval
+        self.queue = queue
+    }
+
+    func update(with properties: TrackerProperties, source: CommandersActSource?, labels: @escaping (TrackerProperties) -> [String: String]) {
+        self.properties = properties
+
+        if properties.playbackState == .playing {
+            guard cancellable == nil else { return }
+            cancellable = Self.eventPublisher(for: properties, delay: delay, posInterval: posInterval, uptimeInterval: uptimeInterval)
+                .receive(on: queue)
+                .sink { [weak self] event in
+                    self?.sendEvent(event, source: source, labels: labels)
+                }
+        }
+        else {
+            reset()
+        }
+    }
+
+    func reset() {
+        cancellable = nil
+    }
+
+    private func sendEvent(_ event: Event, source: CommandersActSource?, labels: @escaping (TrackerProperties) -> [String: String]) {
+        guard let properties else { return }
+        Analytics.shared.sendEvent(commandersAct: .init(
+            name: event.rawValue,
+            source: source,
+            labels: labels(properties.current())
+        ))
+    }
+}
+
+private extension CommandersActHeartbeat {
+    static func delayedPeriodicPublisher(delay: TimeInterval, interval: TimeInterval) -> AnyPublisher<Void, Never> {
+        Timer.publish(every: interval, on: .main, in: .common)
+            .autoconnect()
+            .map { _ in }
+            .prepend(())
+            .delay(for: .seconds(delay), scheduler: DispatchQueue.main)
+            .eraseToAnyPublisher()
+    }
+
+    static func eventPublisher(for event: Event, delay: TimeInterval, interval: TimeInterval) -> AnyPublisher<Event, Never> {
+        delayedPeriodicPublisher(delay: delay, interval: interval)
+            .map { _ in event }
+            .eraseToAnyPublisher()
+    }
+
+    static func eventPublisher(
+        for properties: TrackerProperties,
+        delay: TimeInterval,
+        posInterval: TimeInterval,
+        uptimeInterval: TimeInterval
+    ) -> AnyPublisher<Event, Never> {
+        switch properties.streamType {
+        case .onDemand:
+            return eventPublisher(for: .pos, delay: delay, interval: posInterval)
+        case .live, .dvr:
+            return Publishers.Merge(
+                eventPublisher(for: .pos, delay: delay, interval: posInterval),
+                eventPublisher(for: .uptime, delay: delay, interval: uptimeInterval)
+            )
+            .eraseToAnyPublisher()
+        default:
+            return Empty().eraseToAnyPublisher()
+        }
+    }
+}
+
+private extension CommandersActHeartbeat {
+    enum Event: String {
+        case pos
+        case uptime
+    }
+}

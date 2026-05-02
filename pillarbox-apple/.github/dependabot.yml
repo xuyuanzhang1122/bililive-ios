@@ -1,0 +1,38 @@
+---
+version: 2
+updates:
+  - package-ecosystem: "bundler"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    labels:
+      - "dependencies"
+    groups:
+      gems:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    labels:
+      - "dependencies"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "swift"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    labels:
+      - "dependencies"
+    groups:
+      packages:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "github.com/krzysztofzablocki/difference"
+      - dependency-name: "github.com/quick/nimble"

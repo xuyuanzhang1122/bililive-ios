@@ -1,0 +1,31 @@
+PRODUCT_BUNDLE_IDENTIFIER = ch.srgssr.$(COMMON__BUNDLE_IDENTIFIER)$(COMMON__BUNDLE_IDENTIFIER_SUFFIX)
+PRODUCT_NAME = Pillarbox-demo
+
+BUNDLE_DISPLAY_NAME = Pillarbox
+BUNDLE_DISPLAY_NAME[config=Nightly] = Pillarbox 🌙
+BUNDLE_DISPLAY_NAME[config=Debug] = Pillarbox 🛠
+
+TEST_FLIGHT_APPLICATION_IDENTIFIER[config=Nightly] = 1637569424
+TEST_FLIGHT_APPLICATION_IDENTIFIER[config=Release] = 1637569235
+
+SWIFT_ACTIVE_COMPILATION_CONDITIONS[config=Nightly] = NIGHTLY
+SWIFT_ACTIVE_COMPILATION_CONDITIONS[config=Debug] = DEBUG
+
+ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphone*] = AppIcon
+ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletv*] = App Icon & Top Shelf Image
+
+COMMON__BUNDLE_IDENTIFIER = Pillarbox-demo
+
+COMMON__BUNDLE_IDENTIFIER_SUFFIX[config=Nightly] = .nightly
+COMMON__BUNDLE_IDENTIFIER_SUFFIX[config=Debug] = .debug
+
+// Setup to enable platform suffixes to enable sources or resources for a specific platform only
+// See https://davedelong.com/blog/2018/07/25/conditional-compilation-in-swift-part-2/
+IOS_FILES = *~ios.*
+TVOS_FILES = *~tvos.*
+
+EXCLUDED_SOURCE_FILE_NAMES = $(IOS_FILES) $(TVOS_FILES)
+
+INCLUDED_SOURCE_FILE_NAMES =
+INCLUDED_SOURCE_FILE_NAMES[sdk=iphone*] = $(IOS_FILES)
+INCLUDED_SOURCE_FILE_NAMES[sdk=appletv*] = $(TVOS_FILES)

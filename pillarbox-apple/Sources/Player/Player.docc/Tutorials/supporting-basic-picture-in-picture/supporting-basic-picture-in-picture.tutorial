@@ -1,0 +1,61 @@
+@Tutorial(time: 10) {
+    @Intro(title: "Supporting basic Picture in Picture") {
+        Quickly integrate basic Picture in Picture functionality into your app.
+
+        @Image(source: supporting-basic-picture-in-picture, alt: "Icons representing Picture in Picture functionality.")
+    }
+    
+    @Section(title: "Set up the project") {
+        @ContentAndMedia {
+            Prepare your project to support Picture in Picture by configuring essential settings.
+        }
+        
+        @Steps {
+            @Step {
+                Enable Picture in Picture in your app's target by activating the corresponding [background mode](https://developer.apple.com/documentation/avfoundation/media_playback/configuring_your_app_for_media_playback#418261).
+            }
+            
+            @Step {
+                Configure your app's [audio session category](https://developer.apple.com/documentation/avfoundation/streaming_and_airplay/supporting_airplay_in_your_app#2929254) to `.playback`, e.g., in your application delegate.
+
+                @Code(name: "Application.swift", file: supporting-basic-picture-in-picture-1-2)
+            }
+        }
+    }
+    
+    @Section(title: "Add Picture in Picture support") {
+        @ContentAndMedia {
+            Implement basic Picture in Picture functionality in your application.
+        }
+        
+        @Steps {
+            @Step {
+                Create a ``Player`` instance and display its content using a ``VideoView``.
+
+                @Code(name: "ContentView.swift", file: supporting-basic-picture-in-picture-2-1.swift) {
+                    @Image(source: supporting-basic-picture-in-picture-2-1, alt: "A screenshot of a basic video player.")
+                }
+            }
+            
+            @Step {
+                Enable Picture in Picture support for the ``VideoView``.
+
+                @Code(name: "ContentView.swift", file: supporting-basic-picture-in-picture-2-2.swift)
+            }
+            
+            @Step {
+                Expand the ``VideoView`` to ignore the safe area, ensuring it can cover the entire screen.
+
+                > Note: On iOS and iPadOS, Picture in Picture might automatically activate when users leave your app, especially if the video view occupies the full screen.
+
+                @Code(name: "ContentView.swift", file: supporting-basic-picture-in-picture-2-3.swift)
+            }
+            
+            @Step {
+                Test the functionality by returning to the Home screen. Picture in Picture should initiate automatically.
+
+                @Image(source: supporting-basic-picture-in-picture-2-4, alt: "An example of Picture in Picture in action.")
+            }
+        }
+    }
+}

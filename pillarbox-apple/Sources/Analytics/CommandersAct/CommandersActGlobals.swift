@@ -1,0 +1,27 @@
+//
+//  Copyright (c) SRG SSR. All rights reserved.
+//
+//  License information is available from the LICENSE file.
+//
+
+/// A struct representing global labels to send to Commanders Act.
+public struct CommandersActGlobals {
+    let labels: [String: String]
+
+    /// Creates Commanders Act global labels.
+    /// 
+    /// - Parameters:
+    ///   - consentServices: The list of services for which the user provided consent.
+    ///   - profileIdentifier: An identifier for the app user, if any.
+    ///   - labels: Additional information associated with the global labels.
+    public init(
+        consentServices: [String],
+        profileIdentifier: String? = nil,
+        labels: [String: String] = [:]
+    ) {
+        self.labels = labels.merging([
+            "consent_services": consentServices.joined(separator: ","),
+            "profile_id": profileIdentifier
+        ].compactMapValues(\.self)) { _, new in new }
+    }
+}

@@ -1,0 +1,143 @@
+# ``PillarboxPlayer/Player``
+
+## Topics
+
+### Creating a Player
+
+- ``init(item:configuration:)``
+- ``init(items:configuration:)``
+
+#### Configuring Player Behavior
+
+- ``actionAtItemEnd``
+- ``audiovisualBackgroundPlaybackPolicy``
+- ``configuration``
+- ``isMuted``
+- ``limits``
+- ``repeatMode``
+- ``shouldPlay``
+- ``textStyleRules``
+
+### Managing Player Items
+
+- ``append(_:)``
+- ``currentItem``
+- ``insert(_:after:)``
+- ``insert(_:before:)``
+- ``items``
+- ``move(_:after:)``
+- ``move(_:before:)``
+- ``nextItems``
+- ``prepend(_:)``
+- ``previousItems``
+- ``remove(_:)``
+- ``removeAllItems()``
+
+### Controlling Playback
+
+- ``canReplay()``
+- ``pause()``
+- ``play()``
+- ``replay()``
+- ``togglePlayPause()``
+
+### Observing Playback Properties
+
+- ``chunkDuration``
+- ``date()``
+- ``error``
+- ``isExternalPlaybackActive``
+- ``mediaType``
+- ``metadata``
+- ``metrics()``
+- ``playbackState``
+- ``presentationSize``
+- ``propertiesPublisher``
+- ``rate``
+- ``time()``
+- ``version``
+
+### Observing Playback Time
+
+- ``boundaryTimePublisher(for:queue:)``
+- ``periodicTimePublisher(forInterval:queue:)``
+
+### Seeking Through Media
+
+- ``canSeek(to:)``
+- ``seek(_:smooth:completion:)``
+- ``seek(to:completion:)-(CMTime,_)``
+- ``seek(to:completion:)-(Date,_)``
+- ``seek(to:completion:)-(Chapter,_)``
+
+### Resuming
+
+- ``resume(_:in:)``
+
+### Skipping Through Media
+
+- ``canSkip(_:)``
+- ``canSkipBackward()``
+- ``canSkipForward()``
+- ``canSkipToDefault()``
+- ``skip(_:completion:)``
+- ``skipBackward(completion:)``
+- ``skipForward(completion:)``
+- ``skipToDefault(completion:)``
+
+### Creating Player Positions
+
+- ``after(_:)``
+- ``at(_:)``
+- ``before(_:)``
+- ``near(_:)``
+- ``to(_:toleranceBefore:toleranceAfter:)``
+
+### Navigating Between Items
+
+- ``advanceToNextItem()``
+- ``canAdvanceToNextItem()``
+- ``canReturnToPreviousItem()``
+- ``currentItem``
+- ``returnToPreviousItem()``
+
+### Managing Media Selection
+
+- ``currentMediaOption(for:)``
+- ``mediaOption(for:)``
+- ``mediaSelectionCharacteristics``
+- ``mediaSelectionOptions(for:)``
+- ``select(mediaOption:for:)``
+- ``selectedMediaOption(for:)``
+- ``setMediaSelectionPreference(_:for:)``
+
+### Controlling Playback Speed
+
+- ``playbackSpeed``
+- ``playbackSpeedRange``
+
+### Accessing Player Internals
+
+- ``systemPlayer``
+
+### Integrating with Control Center and AirPlay
+
+- ``becomeActive()``
+- ``resignActive()``
+
+### Tracking Playback
+
+- ``isTrackingEnabled``
+- ``currentSessionIdentifiers(trackedBy:)``
+
+### Observing Metrics
+
+- ``metricEventsPublisher``
+- ``periodicMetricsPublisher(forInterval:queue:limit:)``
+
+### Integrating with SwiftUI Menus
+
+- ``mediaSelectionMenu(characteristic:action:)``
+- ``playbackSpeedMenu(speeds:action:)``
+- ``standardSettingsMenu(speeds:action:)``
+- ``zoomMenu(gravity:action:)``

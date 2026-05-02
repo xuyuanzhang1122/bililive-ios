@@ -1,0 +1,572 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    " in Switzerland" : {
+
+    },
+    "-%llds" : {
+
+    },
+    "%@ will start in" : {
+
+    },
+    "%g×" : {
+
+    },
+    "%g× %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$g× %2$@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$g× %2$@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$g× %2$@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$g× %2$@"
+          }
+        },
+        "rm" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$g× %2$@"
+          }
+        }
+      }
+    },
+    "%lld seconds" : {
+
+    },
+    "+%llds" : {
+
+    },
+    "360° videos" : {
+
+    },
+    "Action at item end" : {
+
+    },
+    "Active (AirPlay / Control Center)" : {
+
+    },
+    "Add" : {
+
+    },
+    "Add content" : {
+
+    },
+    "Advance" : {
+
+    },
+    "Android" : {
+
+    },
+    "Append" : {
+
+    },
+    "Apple streams" : {
+
+    },
+    "Application" : {
+
+    },
+    "Aspect ratios" : {
+
+    },
+    "Asset" : {
+
+    },
+    "Audiovisual background policy" : {
+
+    },
+    "Automatic" : {
+
+    },
+    "Back to Live" : {
+
+    },
+    "Backward by" : {
+
+    },
+    "BBC Test Card streams" : {
+
+    },
+    "Blue" : {
+
+    },
+    "Both" : {
+
+    },
+    "Bottom" : {
+
+    },
+    "Buffering" : {
+
+    },
+    "Button" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Castor (Google Cast SDK)" : {
+
+    },
+    "Clear URL cache" : {
+
+    },
+    "Close" : {
+
+    },
+    "Color" : {
+
+    },
+    "Content displayed" : {
+
+    },
+    "Continues if possible" : {
+
+    },
+    "Corner cases" : {
+
+    },
+    "Curr. %.02f Mbps" : {
+
+    },
+    "Current position" : {
+
+    },
+    "Custom Player and Picture in Picture (PiP) support" : {
+
+    },
+    "Data volume" : {
+
+    },
+    "Data volume (%@" : {
+
+    },
+    "Debugging" : {
+
+    },
+    "Deferred" : {
+
+    },
+    "Delete all" : {
+
+    },
+    "Displays touches for presentation purposes." : {
+
+    },
+    "Documentation" : {
+
+    },
+    "Double tap to toggle controls" : {
+
+    },
+    "Downloads" : {
+
+    },
+    "Embeddings" : {
+
+    },
+    "Enabled" : {
+
+    },
+    "Enter something to search." : {
+
+    },
+    "Event log" : {
+
+    },
+    "Examples" : {
+
+    },
+    "Font size" : {
+
+    },
+    "Forward by" : {
+
+    },
+    "Frame drops" : {
+
+    },
+    "From Beginning" : {
+
+    },
+    "GitHub project" : {
+
+    },
+    "Green" : {
+
+    },
+    "Hide" : {
+
+    },
+    "Improves playlist navigation so that it feels more natural." : {
+
+    },
+    "Index" : {
+
+    },
+    "Indicated bitrate" : {
+
+    },
+    "Indicated bitrate (Mbps)" : {
+
+    },
+    "Information" : {
+
+    },
+    "Insert after" : {
+
+    },
+    "Insert before" : {
+
+    },
+    "Jump to live" : {
+
+    },
+    "Kind" : {
+
+    },
+    "Layouts" : {
+
+    },
+    "Links" : {
+
+    },
+    "Lists" : {
+
+    },
+    "Lists (%@)" : {
+
+    },
+    "LIVE" : {
+
+    },
+    "Made with " : {
+
+    },
+    "Made with love in Switzerland" : {
+
+    },
+    "Manages FairPlay decryption keys with modern APIs." : {
+
+    },
+    "Max. %.02f Mbps" : {
+
+    },
+    "Mbps" : {
+
+    },
+    "Media requests" : {
+
+    },
+    "Menu" : {
+
+    },
+    "Metadata" : {
+
+    },
+    "Metrics" : {
+
+    },
+    "Min. %.02f Mbps" : {
+
+    },
+    "Miscellaneous player features (using Pillarbox)" : {
+
+    },
+    "Mode" : {
+
+    },
+    "Monitoring" : {
+
+    },
+    "Multiplier" : {
+
+    },
+    "Mux streams" : {
+
+    },
+    "Next" : {
+
+    },
+    "No content" : {
+
+    },
+    "No downloads." : {
+
+    },
+    "No items" : {
+
+    },
+    "No metrics" : {
+
+    },
+    "No results." : {
+
+    },
+    "Observed bitrate" : {
+
+    },
+    "Observed bitrate (Mbps)" : {
+
+    },
+    "Observed bitrate max" : {
+
+    },
+    "Observed bitrate min" : {
+
+    },
+    "Open as playlist" : {
+
+    },
+    "Open full-screen player" : {
+
+    },
+    "Open modal" : {
+
+    },
+    "Open settings" : {
+
+    },
+    "Opt-in features" : {
+
+    },
+    "Optimal" : {
+
+    },
+    "Pause" : {
+
+    },
+    "Pauses" : {
+
+    },
+    "Picture in Picture" : {
+
+    },
+    "Picture in Picture Corner Cases" : {
+
+    },
+    "Play" : {
+
+    },
+    "Playback duration" : {
+
+    },
+    "Playback HUD" : {
+
+    },
+    "Playback Speed" : {
+
+    },
+    "Player" : {
+
+    },
+    "Playlists" : {
+
+    },
+    "Prepend" : {
+
+    },
+    "Presenter mode" : {
+
+    },
+    "Previous" : {
+
+    },
+    "Protected streams (URNs)" : {
+
+    },
+    "Quality" : {
+
+    },
+    "Red" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Route picker" : {
+
+    },
+    "Search" : {
+
+    },
+    "Seek behavior" : {
+
+    },
+    "Server" : {
+
+    },
+    "Settings" : {
+
+    },
+    "Showcase" : {
+
+    },
+    "Shows a video overlay displaying various playback-related statistics." : {
+
+    },
+    "Shuffle" : {
+
+    },
+    "Simulate memory warning" : {
+
+    },
+    "Skip" : {
+
+    },
+    "Skips" : {
+
+    },
+    "Smart navigation" : {
+
+    },
+    "Source code" : {
+
+    },
+    "SRG SSR streams (URNs)" : {
+
+    },
+    "Stalls" : {
+
+    },
+    "Startup times (QoE)" : {
+
+    },
+    "Startup times (QoS)" : {
+
+    },
+    "Startup times (Quality of experience)" : {
+
+    },
+    "Startup times (Quality of service)" : {
+
+    },
+    "Stop" : {
+
+    },
+    "Swap" : {
+
+    },
+    "Swift Package Index" : {
+
+    },
+    "System player (using AVPlayer)" : {
+
+    },
+    "System player (using Pillarbox)" : {
+
+    },
+    "System Player and Picture in Picture (PiP) support" : {
+
+    },
+    "TestFlight builds" : {
+
+    },
+    "Third-party streams" : {
+
+    },
+    "Time ranges" : {
+
+    },
+    "Top" : {
+
+    },
+    "Total" : {
+
+    },
+    "Total %@" : {
+
+    },
+    "Total %lld" : {
+
+    },
+    "Tracking" : {
+
+    },
+    "Tracking sessions" : {
+
+    },
+    "Type" : {
+
+    },
+    "Unbuffered streams" : {
+
+    },
+    "Unified Streaming streams" : {
+
+    },
+    "URI" : {
+
+    },
+    "URL" : {
+
+    },
+    "URL with SRG SSR DRM encryption" : {
+
+    },
+    "URL with SRG SSR token protection" : {
+
+    },
+    "URN (Production)" : {
+
+    },
+    "URN (Stage)" : {
+
+    },
+    "URN (Test)" : {
+
+    },
+    "Use a proxy tool to observe events." : {
+
+    },
+    "Use content key session" : {
+
+    },
+    "Value" : {
+
+    },
+    "Various streams (URLs)" : {
+
+    },
+    "Video" : {
+
+    },
+    "Web" : {
+
+    },
+    "Website" : {
+
+    },
+    "White" : {
+
+    },
+    "X offset" : {
+
+    },
+    "Y offset" : {
+
+    },
+    "Yellow" : {
+
+    }
+  },
+  "version" : "1.0"
+}

@@ -29,6 +29,7 @@ struct ContentView: View {
                     Label("设置", systemImage: "gear")
                 }
         }
+        .tint(Color(red: 0.12, green: 0.86, blue: 0.78)) // A modern teal/cyan accent color
         .overlay(alignment: .top) {
             if appConfig.activeURL.isEmpty {
                 unconfiguredBanner
@@ -37,16 +38,30 @@ struct ContentView: View {
     }
 
     private var unconfiguredBanner: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            Text("尚未配置服务器，请前往\"设置\"填写地址")
-                .font(.caption)
+                .font(.system(size: 20))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("未配置服务器")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.primary)
+                Text("请前往“设置”填写地址以使用完整功能")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.thinMaterial, in: Capsule())
-        .padding(.top, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.1), radius: 10, y: 5)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
         .transition(.move(edge: .top).combined(with: .opacity))
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: appConfig.activeURL.isEmpty)
     }

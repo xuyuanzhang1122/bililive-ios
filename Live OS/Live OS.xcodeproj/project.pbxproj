@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		95B1A1012FA6400100D85C01 /* PillarboxPlayer in Frameworks */ = {isa = PBXBuildFile; productRef = 95B1A1002FA6400100D85C01 /* PillarboxPlayer */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		954DC6AD2F9B3760007F9F56 /* Live OS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Live OS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -36,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				95B1A1012FA6400100D85C01 /* PillarboxPlayer in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +83,7 @@
 			);
 			name = "Live OS";
 			packageProductDependencies = (
+				95B1A1002FA6400100D85C01 /* PillarboxPlayer */,
 			);
 			productName = "Live OS";
 			productReference = 954DC6AD2F9B3760007F9F56 /* Live OS.app */;
@@ -107,6 +113,9 @@
 			);
 			mainGroup = 954DC6A42F9B3760007F9F56;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				95B1A0FF2FA6400100D85C01 /* XCLocalSwiftPackageReference "../pillarbox-apple" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 954DC6AE2F9B3760007F9F56 /* Products */;
 			projectDirPath = "";
@@ -353,6 +362,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		95B1A0FF2FA6400100D85C01 /* XCLocalSwiftPackageReference "../pillarbox-apple" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../pillarbox-apple";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		95B1A1002FA6400100D85C01 /* PillarboxPlayer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 95B1A0FF2FA6400100D85C01 /* XCLocalSwiftPackageReference "../pillarbox-apple" */;
+			productName = PillarboxPlayer;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 954DC6A52F9B3760007F9F56 /* Project object */;
 }

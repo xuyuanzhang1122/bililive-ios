@@ -45,3 +45,8 @@
 1. 在服务端的 Web UI 设置中开启 API Key。
 2. 在 App 的设置界面填入服务端的局域网 IP / 公网域名，以及 API Key。
 3. 连接成功后即可开始管理你的录播视频。
+
+## 致谢
+
+本项目在开发过程中引用了以下优秀的开源项目：
+- [pillarbox-apple](https://github.com/SRGSSR/pillarbox-apple.git)

@@ -14,6 +14,7 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("观看历史")
+            .background(Color(.systemGroupedBackground))
             .task {
                 let model = HistoryViewModel(client: appConfig.client)
                 vm = model
@@ -26,38 +27,106 @@ struct HistoryView: View {
     private func historyContent(_ vm: HistoryViewModel) -> some View {
         if vm.isLoading && vm.entries.isEmpty {
             ProgressView("加载中…")
-        } else if let err = vm.errorMessage, vm.entries.isEmpty {
-            ContentUnavailableView("无法加载", systemImage: "exclamationmark.triangle", description: Text(err))
         } else if vm.entries.isEmpty {
-            ContentUnavailableView("暂无观看历史", systemImage: "clock", description: Text("观看过的视频会出现在这里"))
+            ContentUnavailableView("暂无观看历史", systemImage: "clock.fill", description: Text("观看过的视频会出现在这里"))
         } else {
-            List {
-                ForEach(vm.entries) { entry in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(entry.displayName)
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                        HStack(spacing: 10) {
-                            Text("\(formatTime(entry.positionSeconds)) / \(formatTime(entry.durationSeconds))")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.blue)
-                            Text(entry.updatedAt)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(vm.entries) { entry in
+                        HistoryCard(entry: entry, client: appConfig.client) {
+                            Task { await vm.deleteEntry(entry) }
                         }
                     }
-                    .padding(.vertical, 4)
                 }
-                .onDelete { offsets in
-                    Task { await vm.deleteEntries(at: offsets) }
-                }
+                .padding()
             }
             .refreshable { await vm.load() }
         }
     }
+}
+
+// MARK: - History Card
+
+private struct HistoryCard: View {
+    let entry: HistoryEntry
+    let client: APIClient
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Thumbnail
+            AsyncImage(url: client.thumbnailURL(for: entry.videoPath)) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().aspectRatio(16/9, contentMode: .fill)
+                case .failure:
+                    placeholder
+                default:
+                    Color.secondary.opacity(0.15).aspectRatio(16/9, contentMode: .fill)
+                        .overlay { ProgressView() }
+                }
+            }
+            .frame(width: 140)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            
+            // Info
+            VStack(alignment: .leading, spacing: 6) {
+                Text(entry.displayName)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                
+                Spacer(minLength: 0)
+                
+                HStack {
+                    Text("\(formatTime(entry.positionSeconds)) / \(formatTime(entry.durationSeconds))")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(entry.updatedAt.components(separatedBy: " ").first ?? "")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                
+                // Progress Bar
+                GeometryReader { proxy in
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.2))
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.accentColor)
+                                .frame(width: proxy.size.width * progressRatio)
+                        }
+                }
+                .frame(height: 4)
+            }
+            .padding(.vertical, 4)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
+        .contextMenu {
+            Button(role: .destructive, action: onDelete) {
+                Label("删除记录", systemImage: "trash")
+            }
+        }
+    }
+    
+    private var progressRatio: CGFloat {
+        guard entry.durationSeconds > 0 else { return 0 }
+        let ratio = CGFloat(entry.positionSeconds / entry.durationSeconds)
+        return min(max(ratio, 0), 1)
+    }
+
+    private var placeholder: some View {
+        Color.secondary.opacity(0.15)
+            .aspectRatio(16/9, contentMode: .fill)
+            .overlay { Image(systemName: "video.slash").foregroundStyle(.secondary) }
+    }
 
     private func formatTime(_ seconds: Double) -> String {
-        guard seconds.isFinite && seconds > 0 else { return "00:00" }
+        guard seconds.isFinite && seconds >= 0 else { return "00:00" }
         let total = Int(seconds.rounded())
         let h = total / 3600, m = (total % 3600) / 60, s = total % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
@@ -81,32 +150,18 @@ final class HistoryViewModel {
 
     @MainActor
     func load() async {
-        let cacheKey = "WatchHistory"
-        // 先读缓存
-        if let cached: [HistoryEntry] = CacheManager.shared.load(forKey: cacheKey, as: [HistoryEntry].self), entries.isEmpty {
-            self.entries = cached
-        }
         isLoading = entries.isEmpty
         errorMessage = nil
-        do {
-            let newEntries = try await client.getWatchHistory()
-            self.entries = newEntries
-            CacheManager.shared.save(newEntries, forKey: cacheKey)
-        } catch {
-            if entries.isEmpty {
-                errorMessage = error.localizedDescription
-            }
-        }
+        
+        self.entries = LocalHistoryManager.shared.getHistory()
+        
         isLoading = false
     }
 
     @MainActor
-    func deleteEntries(at offsets: IndexSet) async {
-        for idx in offsets {
-            let entry = entries[idx]
-            try? await client.deleteWatchHistory(videoPath: entry.videoPath)
-        }
-        entries.remove(atOffsets: offsets)
+    func deleteEntry(_ entry: HistoryEntry) async {
+        LocalHistoryManager.shared.deleteHistory(videoPath: entry.videoPath)
+        self.entries.removeAll { $0.videoPath == entry.videoPath }
     }
 }
 

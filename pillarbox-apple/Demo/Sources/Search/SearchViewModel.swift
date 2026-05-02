@@ -1,0 +1,97 @@
+//
+//  Copyright (c) SRG SSR. All rights reserved.
+//
+//  License information is available from the LICENSE file.
+//
+
+import Combine
+import Foundation
+import SRGDataProvider
+import SRGDataProviderCombine
+import SRGDataProviderModel
+
+final class SearchViewModel: ObservableObject, Refreshable {
+    enum State {
+        case empty
+        case loading
+        case loaded(medias: [SRGMedia])
+        case failed(Error)
+    }
+
+    enum TriggerId {
+        case reload
+        case loadMore
+    }
+
+    private static let settings = {
+        let settings = SRGMediaSearchSettings()
+        settings.aggregationsEnabled = false
+        return settings
+    }()
+
+    @Published var text = ""
+    @Published var state: State = .empty
+    @Published var vendor: SRGVendor = .RTS
+
+    private let trigger = Trigger()
+
+    var animationValue: String {
+        switch state {
+        case .empty:
+            return "empty"
+        case .loading:
+            return "loading"
+        case.loaded:
+            return "loaded"
+        case .failed:
+            return "failed"
+        }
+    }
+
+    init() {
+        Publishers.CombineLatest($text, $vendor)
+            .debounceAfterFirst(for: 0.5, scheduler: DispatchQueue.main)
+            .map { [trigger] text, vendor in
+                Publishers.PublishAndRepeat(onOutputFrom: trigger.signal(activatedBy: TriggerId.reload)) {
+                    Self.mediasPublisher(text: text, vendor: vendor, trigger: trigger)
+                }
+            }
+            .switchToLatest()
+            .receiveOnMainThread()
+            .assign(to: &$state)
+    }
+
+    private static func mediasPublisher(text: String, vendor: SRGVendor, trigger: Trigger) -> AnyPublisher<State, Never> {
+        guard !text.isEmpty else {
+            return Just(.empty)
+                .eraseToAnyPublisher()
+        }
+        return SRGDataProvider.current!.medias(
+            for: vendor,
+            matchingQuery: text,
+            with: settings,
+            pageSize: kPageSize,
+            paginatedBy: trigger.signal(activatedBy: TriggerId.loadMore)
+        )
+        .map { output in
+            SRGDataProvider.current!.medias(withUrns: output.mediaUrns, pageSize: kPageSize)
+        }
+        .switchToLatest()
+        .scan([], +)
+        .map { State.loaded(medias: $0.removeDuplicates()) }
+        .catch { Just(State.failed($0)) }
+        .prepend(.loading)
+        .eraseToAnyPublisher()
+    }
+
+    func refresh() async {
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            trigger.activate(for: TriggerId.reload)
+        }
+    }
+
+    func loadMore() {
+        trigger.activate(for: TriggerId.loadMore)
+    }
+}

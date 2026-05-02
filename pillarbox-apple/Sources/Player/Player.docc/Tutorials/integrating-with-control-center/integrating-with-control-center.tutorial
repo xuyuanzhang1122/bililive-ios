@@ -1,0 +1,43 @@
+@Tutorial(time: 10) {
+    @Intro(title: "Integrating with the Control Center") {
+        Learn how to enable playback control directly from the Control Center.
+
+        @Image(source: integrating-with-control-center, alt: "An image showing the Control Center interface.")
+    }
+    
+    @Section(title: "Enable playback control from the Control Center") {
+        @ContentAndMedia {
+            Integrate a player into your app that allows basic playback control via the Control Center.
+        }
+
+        @Steps {
+            @Step {
+                Create a ``Player`` and associate it with a ``VideoView`` to display video content.
+
+                @Code(name: "ContentView.swift", file: integrating-with-control-center-1-1.swift) {
+                    @Image(source: integrating-with-control-center-1-1, alt: "An iPhone screenshot showing the initial player setup.")
+                }
+            }
+            
+            @Step {
+                Call ``Player/becomeActive()`` to enable Control Center integration for the ``Player``.
+
+                After this step, the Control Center can control playback actions such as play and pause. However, metadata will not yet be displayed.
+
+                @Code(name: "ContentView.swift", file: integrating-with-control-center-1-2.swift) {
+                    @Image(source: integrating-with-control-center-1-2, alt: "An iPhone screenshot showing Control Center integration.")
+                }
+            }
+            
+            @Step {
+                Associate metadata with the item being played.
+                
+                This implementation assumes your app resources contain an image named `apple`.
+
+                @Code(name: "ContentView.swift", file: integrating-with-control-center-1-3.swift) {
+                    @Image(source: integrating-with-control-center-1-3, alt: "An iPhone screenshot showing metadata displayed in the Control Center.")
+                }
+            }
+        }
+    }
+}

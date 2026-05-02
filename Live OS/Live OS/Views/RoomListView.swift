@@ -67,8 +67,13 @@ struct RoomListView: View {
                             catch { actionError = error.localizedDescription }
                         }
                     }
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 }
             }
+            .listStyle(.plain)
+            .background(Color(.systemGroupedBackground))
             .refreshable { await vm.load() }
         }
     }
@@ -133,29 +138,55 @@ private struct RoomRow: View {
     let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(room.recording ? .red : room.listening ? .green : .gray.opacity(0.4))
-                .frame(width: 10, height: 10)
+        HStack(spacing: 14) {
+            // Status Indicator (Neon Glow effect)
+            ZStack {
+                Circle()
+                    .fill(room.recording ? Color.red : room.listening ? Color.green : Color.gray.opacity(0.4))
+                    .frame(width: 12, height: 12)
+                
+                if room.recording || room.listening {
+                    Circle()
+                        .stroke(room.recording ? Color.red.opacity(0.4) : Color.green.opacity(0.4), lineWidth: 4)
+                        .frame(width: 18, height: 18)
+                }
+            }
+            .padding(.leading, 4)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(room.hostName.isEmpty ? "未知主播" : room.hostName)
                     .font(.headline)
+                    .foregroundStyle(.primary)
                 Text(room.roomName.isEmpty ? "—" : room.roomName)
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
             Spacer()
 
-            Button(room.listening ? "停止" : "监听", action: onToggle)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(room.listening ? .orange : .accentColor)
+            Button(action: onToggle) {
+                Text(room.listening ? "停止" : "监听")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(room.listening ? Color.orange : Color.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        room.listening ? Color.orange.opacity(0.15) : Color.accentColor,
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(.plain)
         }
-        .swipeActions(edge: .trailing) {
-            Button("删除", role: .destructive, action: onDelete)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.04), radius: 6, y: 3)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive, action: onDelete) {
+                Label("删除", systemImage: "trash")
+            }
         }
     }
 }
