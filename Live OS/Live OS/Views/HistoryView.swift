@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryView: View {
     @Environment(AppConfig.self) private var appConfig
     @State private var vm: HistoryViewModel?
+    @State private var selectedFile: VideoFileInfo?
 
     var body: some View {
         NavigationStack {
@@ -15,6 +16,9 @@ struct HistoryView: View {
             }
             .navigationTitle("观看历史")
             .background(Color(.systemGroupedBackground))
+            .fullScreenCover(item: $selectedFile) { file in
+                PlayerView(file: file, client: appConfig.client)
+            }
             .task {
                 let model = HistoryViewModel(client: appConfig.client)
                 vm = model
@@ -27,14 +31,21 @@ struct HistoryView: View {
     private func historyContent(_ vm: HistoryViewModel) -> some View {
         if vm.isLoading && vm.entries.isEmpty {
             ProgressView("加载中…")
+        } else if appConfig.apiKey.isEmpty {
+            ContentUnavailableView("未绑定 API Key", systemImage: "key.fill", description: Text("请先在设置中绑定 Key，以同步你的观看历史"))
+        } else if let err = vm.errorMessage {
+            ContentUnavailableView("无法加载观看历史", systemImage: "exclamationmark.triangle", description: Text(err))
         } else if vm.entries.isEmpty {
-            ContentUnavailableView("暂无观看历史", systemImage: "clock.fill", description: Text("观看过的视频会出现在这里"))
+            ContentUnavailableView("暂无观看历史", systemImage: "clock.fill", description: Text("观看过的视频会同步到当前 Key 用户"))
         } else {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     ForEach(vm.entries) { entry in
                         HistoryCard(entry: entry, client: appConfig.client) {
                             Task { await vm.deleteEntry(entry) }
+                        }
+                        .onTapGesture {
+                            selectedFile = entry.videoFile
                         }
                     }
                 }
@@ -152,16 +163,22 @@ final class HistoryViewModel {
     func load() async {
         isLoading = entries.isEmpty
         errorMessage = nil
-        
-        self.entries = LocalHistoryManager.shared.getHistory()
-        
+        do {
+            entries = try await client.getWatchHistory()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         isLoading = false
     }
 
     @MainActor
     func deleteEntry(_ entry: HistoryEntry) async {
-        LocalHistoryManager.shared.deleteHistory(videoPath: entry.videoPath)
-        self.entries.removeAll { $0.videoPath == entry.videoPath }
+        do {
+            try await client.deleteWatchHistory(videoPath: entry.videoPath)
+            self.entries.removeAll { $0.videoPath == entry.videoPath }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
@@ -180,6 +197,33 @@ struct HistoryEntry: Identifiable, Codable, Equatable {
         return videoPath.split(separator: "/").last.map(String.init) ?? "未知视频"
     }
 
+    var videoFile: VideoFileInfo {
+        VideoFileInfo(
+            name: displayName,
+            relPath: videoPath,
+            size: 0,
+            modTime: Int64(parsedUpdatedAt?.timeIntervalSince1970.rounded() ?? 0),
+            fileURL: nil,
+            thumbnailURL: nil,
+            hlsURL: nil
+        )
+    }
+
+    private var parsedUpdatedAt: Date? {
+        let formats = [
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        ]
+        for format in formats {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = format
+            if let date = formatter.date(from: updatedAt) { return date }
+        }
+        return nil
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case videoPath = "video_path"
@@ -189,6 +233,7 @@ struct HistoryEntry: Identifiable, Codable, Equatable {
         case updatedAt = "updated_at"
     }
 }
+
 
 #Preview {
     HistoryView()

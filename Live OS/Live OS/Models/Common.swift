@@ -29,6 +29,19 @@ struct ResolveURLResult: Decodable {
     let url: String
 }
 
+struct APIKeyUser: Decodable, Equatable {
+    let id: String
+    let name: String
+    let keySuffix: String?
+    let lastUsedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case keySuffix = "key_suffix"
+        case lastUsedAt = "last_used_at"
+    }
+}
+
 struct ServerInfo: Decodable {
     let appName: String
     let appVersion: String
