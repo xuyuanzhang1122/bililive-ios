@@ -45,7 +45,7 @@ struct VideoListView: View {
         } else {
             List(selection: $vm.selection) {
                 ForEach(vm.files) { file in
-                    FileRow(file: file, client: appConfig.client)
+                    FileRow(file: file, client: appConfig.client, history: vm.historyByPath[file.relPath])
                         .contentShape(Rectangle())
                         .onTapGesture {
                             if editMode == .inactive { selectedFile = file }
@@ -94,6 +94,7 @@ struct VideoListView: View {
 private struct FileRow: View {
     let file: VideoFileInfo
     let client: APIClient
+    let history: HistoryEntry?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -121,10 +122,42 @@ private struct FileRow: View {
                 HStack {
                     Text(file.sizeFormatted).font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Text(file.modDate, style: .date).font(.caption).foregroundStyle(.secondary)
+                    if let watchedText {
+                        Text(watchedText)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.05, green: 0.54, blue: 0.51))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color(red: 0.90, green: 1.0, blue: 0.98), in: Capsule())
+                    } else {
+                        Text(file.modDate, style: .date).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let progressRatio {
+                    GeometryReader { proxy in
+                        Capsule()
+                            .fill(Color.secondary.opacity(0.18))
+                            .overlay(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color(red: 0.12, green: 0.86, blue: 0.78))
+                                    .frame(width: proxy.size.width * progressRatio)
+                            }
+                    }
+                    .frame(height: 4)
                 }
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private var progressRatio: CGFloat? {
+        guard let history, history.durationSeconds > 0, history.positionSeconds > 5 else { return nil }
+        let ratio = history.positionSeconds / history.durationSeconds
+        return min(max(CGFloat(ratio), 0), 1)
+    }
+
+    private var watchedText: String? {
+        guard let progressRatio else { return nil }
+        return "已看 \(Int((progressRatio * 100).rounded()))%"
     }
 }

@@ -71,6 +71,10 @@ final class APIClient {
         try await fetch(ServerInfo.self, path: "/api/info")
     }
 
+    func getCurrentAPIKeyUser() async throws -> APIKeyUser {
+        try await fetch(APIKeyUser.self, path: "/api/auth/me")
+    }
+
     // MARK: - Live rooms
 
     func getLives() async throws -> [LiveInfo] {
@@ -151,6 +155,11 @@ final class APIClient {
 
     func getWatchHistory() async throws -> [HistoryEntry] {
         try await fetch([HistoryEntry].self, path: "/api/history")
+    }
+
+    func getWatchHistoryEntry(videoPath: String) async throws -> HistoryEntry {
+        let encoded = encodedRelPath(videoPath)
+        return try await fetch(HistoryEntry.self, path: "/api/history/\(encoded)")
     }
 
     func deleteWatchHistory(videoPath: String) async throws {

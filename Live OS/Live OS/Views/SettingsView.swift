@@ -363,9 +363,20 @@ struct APIKeyView: View {
     @State private var apiKey = ""
     @State private var showKey = false
     @State private var showSaved = false
+    @State private var boundUser: APIKeyUser?
+    @State private var isVerifying = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Form {
+            if let boundUser {
+                Section {
+                    BoundKeyCard(user: boundUser, keySuffix: keySuffix)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
+
             Section {
                 HStack {
                     Group {
@@ -389,13 +400,24 @@ struct APIKeyView: View {
             } header: {
                 Text("API Key")
             } footer: {
-                Text("在服务器 config.yml 中设置 `security.enable_api_key: true` 并填写相同的 key。留空则不启用鉴权。")
+                Text("粘贴 Web 管理台生成的 Key。验证成功后，此设备的观看历史和续播进度会同步到该 Key 对应的用户。")
+            }
+
+            if let errorMessage {
+                Section {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.subheadline)
+                }
             }
 
             if !apiKey.isEmpty {
                 Section {
                     Button("清除", role: .destructive) {
                         apiKey = ""
+                        boundUser = nil
+                        errorMessage = nil
+                        appConfig.applySettings(serverURL: appConfig.serverURL, apiKey: "")
                     }
                 }
             }
@@ -404,15 +426,23 @@ struct APIKeyView: View {
                 Button(action: save) {
                     HStack {
                         Spacer()
-                        Text("保存").bold()
+                        if isVerifying {
+                            ProgressView()
+                        } else {
+                            Text(apiKey.isEmpty ? "保存为空 Key" : "测试并绑定").bold()
+                        }
                         Spacer()
                     }
                 }
+                .disabled(isVerifying)
             }
         }
         .navigationTitle("API Key")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { apiKey = appConfig.apiKey }
+        .onAppear {
+            apiKey = appConfig.apiKey
+            Task { await refreshCurrentUser() }
+        }
         .overlay(alignment: .bottom) {
             if showSaved {
                 Text("已保存")
@@ -427,14 +457,113 @@ struct APIKeyView: View {
     }
 
     private func save() {
-        appConfig.applySettings(
-            serverURL: appConfig.serverURL,
-            apiKey: apiKey.trimmingCharacters(in: .whitespaces)
-        )
-        showSaved = true
         Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            await MainActor.run { showSaved = false }
+            let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                appConfig.applySettings(serverURL: appConfig.serverURL, apiKey: "")
+                boundUser = nil
+                errorMessage = nil
+                await showSavedBadge()
+                return
+            }
+            guard !appConfig.activeURL.isEmpty else {
+                errorMessage = "请先配置服务器地址"
+                return
+            }
+            isVerifying = true
+            errorMessage = nil
+            do {
+                let client = APIClient(baseURL: appConfig.activeURL, apiKey: trimmed)
+                let user = try await client.getCurrentAPIKeyUser()
+                appConfig.applySettings(serverURL: appConfig.serverURL, apiKey: trimmed)
+                boundUser = user
+                await showSavedBadge()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isVerifying = false
         }
+    }
+
+    @MainActor
+    private func refreshCurrentUser() async {
+        guard !appConfig.apiKey.isEmpty, !appConfig.activeURL.isEmpty else { return }
+        do {
+            boundUser = try await appConfig.client.getCurrentAPIKeyUser()
+        } catch {
+            boundUser = nil
+        }
+    }
+
+    @MainActor
+    private func showSavedBadge() async {
+        showSaved = true
+        try? await Task.sleep(for: .seconds(1.5))
+        showSaved = false
+    }
+
+    private var keySuffix: String {
+        let source = boundUser?.keySuffix ?? apiKey
+        guard source.count > 4 else { return source }
+        return String(source.suffix(4))
+    }
+}
+
+private struct BoundKeyCard: View {
+    let user: APIKeyUser
+    let keySuffix: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color(red: 0.12, green: 0.86, blue: 0.78))
+                    Text(user.name.prefix(1).uppercased())
+                        .font(.title2.bold())
+                        .foregroundStyle(Color(red: 0.02, green: 0.17, blue: 0.16))
+                }
+                .frame(width: 54, height: 54)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(user.name)
+                        .font(.headline)
+                    Text("User ID · \(user.id)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Color(red: 0.05, green: 0.54, blue: 0.51))
+                        .lineLimit(1)
+                }
+                Spacer()
+                Label("已同步", systemImage: "checkmark.icloud.fill")
+                    .font(.caption.bold())
+                    .foregroundStyle(.green)
+            }
+
+            HStack(spacing: 8) {
+                statusPill("Key 末尾 \(keySuffix)")
+                statusPill(user.lastUsedAt == nil ? "首次绑定" : "最近同步")
+            }
+
+            Text("此设备会只读取该用户的服务端观看历史；退出播放器时会把最新进度同步回后端。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(red: 0.93, green: 1.0, blue: 0.99))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(Color(red: 0.70, green: 0.96, blue: 0.93), lineWidth: 1)
+                )
+        )
+    }
+
+    private func statusPill(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.white.opacity(0.75), in: Capsule())
     }
 }

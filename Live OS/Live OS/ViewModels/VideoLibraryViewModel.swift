@@ -39,6 +39,7 @@ final class VideoLibraryViewModel {
 @Observable
 final class VideoListViewModel {
     var files: [VideoFileInfo] = []
+    var historyByPath: [String: HistoryEntry] = [:]
     var isLoading = false
     var errorMessage: String?
     var selection: Set<String> = []
@@ -66,6 +67,9 @@ final class VideoListViewModel {
             let newFiles = try await client.getVideoFiles(folderPath: room.folderPath)
             self.files = newFiles
             CacheManager.shared.save(newFiles, forKey: cacheKey)
+            if let history = try? await client.getWatchHistory() {
+                self.historyByPath = Dictionary(uniqueKeysWithValues: history.map { ($0.videoPath, $0) })
+            }
         } catch {
             if files.isEmpty {
                 errorMessage = error.localizedDescription

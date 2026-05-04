@@ -199,14 +199,14 @@ private enum APIKeychain {
     private static let service = "com.bililive-go.ios"
 
     static func save(key: String) {
-        guard !key.isEmpty else { return }
-        let data = Data(key.utf8)
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: "apiKey",
         ]
         SecItemDelete(query as CFDictionary)
+        guard !key.isEmpty else { return }
+        let data = Data(key.utf8)
         var addQuery = query
         addQuery[kSecValueData] = data
         addQuery[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly

@@ -170,6 +170,8 @@ struct PlayerView: View {
     @State private var currentSpeed: Float = 1
     @State private var isCommandDeckVisible = true
     @State private var errorMessage: String?
+    @State private var resumeMessage: String?
+    @State private var syncMessage: String?
     
     // Gestures States
     @State private var showSeekHUD = false
@@ -272,6 +274,21 @@ struct PlayerView: View {
                 )
 
                 PlayerHUDLayer()
+
+                VStack {
+                    Spacer()
+                    if let resumeMessage {
+                        PlayerStatusToast(text: resumeMessage, systemImage: "clock.arrow.circlepath")
+                            .padding(.bottom, 132)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if let syncMessage {
+                        PlayerStatusToast(text: syncMessage, systemImage: "checkmark.icloud.fill")
+                            .padding(.bottom, 132)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .padding(.horizontal, 24)
+                .allowsHitTesting(false)
 
                 // Replay overlay when video ends
                 if playbackState == .ended {
@@ -454,6 +471,7 @@ struct PlayerView: View {
             return
         }
         player.becomeActive()
+        await resumeFromServerHistoryIfNeeded()
         player.play()
     }
 
@@ -473,16 +491,51 @@ struct PlayerView: View {
         let position = progressTracker.time.seconds
         let duration = progressTracker.timeRange.duration.seconds
         guard position.isFinite, duration.isFinite, duration > 0 else { return }
-        
-        let path = file.relPath
-        let name = file.name
-        
-        LocalHistoryManager.shared.saveHistory(
-            videoPath: path,
-            videoName: name,
-            positionSeconds: position,
-            durationSeconds: duration
-        )
+        Task {
+            do {
+                try await client.saveWatchHistory(
+                    videoPath: file.relPath,
+                    videoName: file.name,
+                    positionSeconds: position,
+                    durationSeconds: duration
+                )
+                await MainActor.run {
+                    syncMessage = "已同步到服务端"
+                }
+                try? await Task.sleep(for: .seconds(1.4))
+                await MainActor.run {
+                    if syncMessage == "已同步到服务端" { syncMessage = nil }
+                }
+            } catch {
+                await MainActor.run {
+                    syncMessage = "同步失败"
+                }
+            }
+        }
+    }
+
+    func resumeFromServerHistoryIfNeeded() async {
+        guard let entry = await loadResumeHistory(), entry.durationSeconds > 0 else { return }
+        let position = min(max(entry.positionSeconds, 0), max(entry.durationSeconds - 1, 0))
+        guard position > 5, position < entry.durationSeconds - 5 else { return }
+        let target = CMTime(seconds: position, preferredTimescale: 600)
+        player.seek(to: target)
+        resumeMessage = "已从 \(formatTime(position)) 继续播放"
+        try? await Task.sleep(for: .seconds(2.2))
+        if resumeMessage != nil {
+            resumeMessage = nil
+        }
+    }
+
+    func loadResumeHistory() async -> HistoryEntry? {
+        do {
+            return try await client.getWatchHistoryEntry(videoPath: file.relPath)
+        } catch {
+            if let entries = try? await client.getWatchHistory() {
+                return entries.first { $0.videoPath == file.relPath }
+            }
+            return nil
+        }
     }
 
     func togglePlay() {
@@ -600,6 +653,24 @@ private struct SpeedHUDView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(Color.black.opacity(0.6), in: Capsule())
+    }
+}
+
+private struct PlayerStatusToast: View {
+    let text: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+            Text(text)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.68), in: Capsule())
     }
 }
 
