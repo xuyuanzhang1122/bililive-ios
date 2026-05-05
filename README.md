@@ -2,7 +2,7 @@
 
 这是 `bililive-go-UI` 的专属 iOS 客户端，用于管理录播服务、查看录播视频、并通过内嵌原生高性能播放器随时随地观看录制好的视频。
 
-![首页预览](Docs/Images/preview_homescreen.png)
+![首页预览](https://github.com/user-attachments/assets/请在此处替换你的首页预览链接)
 
 ## ✨ 核心特性
 
@@ -22,9 +22,9 @@
 ## 📸 应用截图
 
 <p align="center">
-  <img src="Docs/Images/preview_library.png" width="30%" />
-  <img src="Docs/Images/preview_add_room.png" width="30%" />
-  <img src="Docs/Images/preview_settings.png" width="30%" />
+  <img src="https://github.com/user-attachments/assets/请在此处替换你的视频库截图链接" width="30%" />
+  <img src="https://github.com/user-attachments/assets/请在此处替换你的添加直播间截图链接" width="30%" />
+  <img src="https://github.com/user-attachments/assets/请在此处替换你的设置页截图链接" width="30%" />
 </p>
 
 ## ⚙️ 配合服务端使用
@@ -51,6 +51,11 @@
 2. 使用 Xcode 16 或更高版本打开 `Live OS.xcodeproj`。
 3. 在 "Signing & Capabilities" 中，配置你自己的 Apple ID 作为 Team，修改 Bundle Identifier。
 4. 连接你的 iOS 17.0+ 设备，按下 `Cmd + R` 编译运行即可。
+
+## 致谢
+
+本项目在开发过程中引用了以下优秀的开源项目：
+- [pillarbox-apple](https://github.com/SRGSSR/pillarbox-apple.git)
 
 ---
 
