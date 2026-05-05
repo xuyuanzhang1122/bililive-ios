@@ -33,13 +33,20 @@ final class APIClient {
         return req
     }
 
-    private func fetch<T: Decodable>(_ type: T.Type, path: String, method: String = "GET", body: Data? = nil) async throws -> T {
+    private func fetch<T: Decodable>(
+        _ type: T.Type,
+        path: String,
+        method: String = "GET",
+        body: Data? = nil,
+        decoder responseDecoder: JSONDecoder? = nil
+    ) async throws -> T {
         let req = try makeRequest(path, method: method, body: body)
         let (data, response) = try await session.data(for: req)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let activeDecoder = responseDecoder ?? decoder
         if statusCode == 401 || statusCode == 403 { throw APIError.unauthorized }
         if statusCode >= 400 {
-            if let wrappedError = try? decoder.decode(APIResponse<EmptyData>.self, from: data) {
+            if let wrappedError = try? activeDecoder.decode(APIResponse<EmptyData>.self, from: data) {
                 throw APIError.serverError(wrappedError.errNo == 0 ? statusCode : wrappedError.errNo, wrappedError.errMsg)
             }
             let responseText = String(data: data, encoding: .utf8)?
@@ -48,7 +55,7 @@ final class APIClient {
             throw APIError.serverError(statusCode, message)
         }
         do {
-            return try decoder.decode(T.self, from: data)
+            return try activeDecoder.decode(T.self, from: data)
         } catch {
             throw APIError.decodingError(error)
         }
@@ -69,6 +76,18 @@ final class APIClient {
 
     func getServerInfo() async throws -> ServerInfo {
         try await fetch(ServerInfo.self, path: "/api/info")
+    }
+
+    func getServerBackupSnapshot() async throws -> BackupServerSnapshot {
+        let config = try await fetch(ServerConfigSnapshot.self, path: "/api/config")
+        return BackupServerSnapshot(
+            rpcBind: config.rpc.bind,
+            outputPath: config.outputPath,
+            appDataPath: config.appDataPath,
+            liveRooms: config.liveRooms.map {
+                BackupLiveRoom(url: $0.url, isListening: $0.isListening)
+            }
+        )
     }
 
     func getCurrentAPIKeyUser() async throws -> APIKeyUser {
@@ -117,6 +136,33 @@ final class APIClient {
     func getVideoFiles(folderPath: String) async throws -> [VideoFileInfo] {
         let encoded = encodedRelPath(folderPath)
         return try await fetch([VideoFileInfo].self, path: "/api/video-files/\(encoded)")
+    }
+
+    // MARK: - Backup / restore
+
+    func createRemoteBackup(_ package: BackupPackage) async throws -> BackupRemoteRecord {
+        let body = try JSONEncoder.backupEncoder.encode(package)
+        return try await fetch(BackupRemoteRecord.self, path: "/api/backups", method: "POST", body: body)
+    }
+
+    func fetchRemoteBackup(id: String) async throws -> BackupPackage {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await fetch(BackupPackage.self, path: "/api/backups/\(encoded)", decoder: .backupDecoder)
+    }
+
+    func restoreBackup(package: BackupPackage) async throws -> BackupRestoreResult {
+        let body = try JSONEncoder.backupEncoder.encode(BackupRestorePackageRequest(package: package))
+        return try await fetch(BackupRestoreResult.self, path: "/api/backups/restore", method: "POST", body: body)
+    }
+
+    func restoreBackup(id: String) async throws -> BackupRestoreResult {
+        let body = try JSONEncoder().encode(BackupRestoreIDRequest(id: id))
+        return try await fetch(BackupRestoreResult.self, path: "/api/backups/restore", method: "POST", body: body)
+    }
+
+    func getRestoreStatus(jobID: String) async throws -> BackupRestoreResult {
+        let encoded = jobID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? jobID
+        return try await fetch(BackupRestoreResult.self, path: "/api/backups/restore/status/\(encoded)")
     }
 
     // MARK: - File management

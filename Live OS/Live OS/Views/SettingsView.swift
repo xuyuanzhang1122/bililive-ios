@@ -58,6 +58,20 @@ struct SettingsView: View {
                 }
             }
 
+            NavigationLink(destination: BackupRestoreView()) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("备份与恢复")
+                        Text("导出服务器配置和直播间，支持按 ID 找回")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "archivebox.fill")
+                        .foregroundStyle(.teal)
+                }
+            }
+
             // Connection status row
             HStack {
                 Label {

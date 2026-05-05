@@ -49,9 +49,9 @@ enum GestureType {
 struct PlayerGestureView: UIViewRepresentable {
     var onTap: () -> Void
     var onDoubleTap: () -> Void
-    var onLongPressBegan: () -> Void
+    var onLongPressBegan: (CGPoint, CGSize) -> Void
+    var onLongPressChanged: (CGPoint, CGSize) -> Void
     var onLongPressEnded: () -> Void
-    var onLongPressSwipeDown: () -> Void
     var onPanBegan: (GestureType) -> Void
     var onPanChanged: (GestureType, CGPoint) -> Void
     var onPanEnded: (GestureType) -> Void
@@ -92,7 +92,6 @@ struct PlayerGestureView: UIViewRepresentable {
     class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var parent: PlayerGestureView
         var currentPanType: GestureType = .none
-        var initialLongPressY: CGFloat = 0
         
         init(parent: PlayerGestureView) {
             self.parent = parent
@@ -108,14 +107,12 @@ struct PlayerGestureView: UIViewRepresentable {
         
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
             let location = gesture.location(in: gesture.view)
+            let size = gesture.view?.bounds.size ?? .zero
             switch gesture.state {
             case .began:
-                initialLongPressY = location.y
-                parent.onLongPressBegan()
+                parent.onLongPressBegan(location, size)
             case .changed:
-                if location.y - initialLongPressY > 60 { // Swipe down to lock
-                    parent.onLongPressSwipeDown()
-                }
+                parent.onLongPressChanged(location, size)
             case .ended, .cancelled, .failed:
                 parent.onLongPressEnded()
             default: break
@@ -189,6 +186,10 @@ struct PlayerView: View {
     @State private var isSpeedingUp = false
     @State private var isSpeedLocked = false
     @State private var showSpeedHUD = false
+    @State private var speedGestureMode: SpeedGestureMode = .none
+    @State private var resumeEntry: HistoryEntry?
+    @State private var didApplyResume = false
+    @State private var didStartPlayback = false
     
     let saveHistoryTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
@@ -216,7 +217,7 @@ struct PlayerView: View {
             _errorMessage = State(initialValue: nil)
         } else {
             _player = StateObject(wrappedValue: Player())
-            _errorMessage = State(initialValue: "无法获取播放地址")
+            _errorMessage = State(initialValue: "正在录制，请稍后")
         }
     }
 
@@ -238,36 +239,9 @@ struct PlayerView: View {
                 PlayerGestureView(
                     onTap: toggleCommandDeck,
                     onDoubleTap: togglePlay,
-                    onLongPressBegan: {
-                        isSpeedingUp = true
-                        showSpeedHUD = true
-                        setSpeed(2.0)
-                    },
-                    onLongPressEnded: {
-                        if !isSpeedLocked {
-                            isSpeedingUp = false
-                            showSpeedHUD = false
-                            setSpeed(currentSpeed) // Revert to set speed
-                        } else {
-                            // If locked, hide the hint after a short delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                withAnimation { showSpeedHUD = false }
-                            }
-                        }
-                    },
-                    onLongPressSwipeDown: {
-                        let impact = UIImpactFeedbackGenerator(style: .medium)
-                        impact.impactOccurred()
-                        if isSpeedLocked {
-                            // Unlock: revert speed and dismiss
-                            isSpeedLocked = false
-                            isSpeedingUp = false
-                            showSpeedHUD = false
-                            setSpeed(1.0)
-                        } else {
-                            isSpeedLocked = true
-                        }
-                    },
+                    onLongPressBegan: handleLongPressBegan,
+                    onLongPressChanged: handleLongPressChanged,
+                    onLongPressEnded: handleLongPressEnded,
                     onPanBegan: handlePanBegan,
                     onPanChanged: handlePanChanged,
                     onPanEnded: handlePanEnded
@@ -328,12 +302,7 @@ struct PlayerView: View {
                         currentSpeed: currentSpeed,
                         formatTime: formatTime,
                         togglePlay: togglePlay,
-                        setSpeed: {
-                            if showSpeedHUD {
-                                isSpeedLocked = false
-                            }
-                            self.setSpeed($0)
-                        }
+                        seekToFraction: seekToFraction
                     )
                     .opacity(isCommandDeckVisible ? 1 : 0)
                 }
@@ -349,9 +318,14 @@ struct PlayerView: View {
         .onReceive(player: player, assign: \.playbackState, to: $playbackState)
         .onReceive(player: player, assign: \.isBusy, to: $isBusy)
         .onReceive(player: player, assign: \.buffer, to: $buffer)
-        .onReceive(player.$error.compactMap { $0?.localizedDescription }) { errorMessage = $0 }
+        .onReceive(player.$error.compactMap { $0?.localizedDescription }) { _ in
+            errorMessage = "正在录制，请稍后"
+        }
         .onReceive(saveHistoryTimer) { _ in
             if isPlaying { saveHistory() }
+        }
+        .onChange(of: progressTracker.timeRange.duration.seconds) { _, _ in
+            Task { await applyResumeWhenReady() }
         }
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
@@ -367,6 +341,7 @@ struct PlayerView: View {
     
     // MARK: - Gesture Methods
     private func handlePanBegan(_ type: GestureType) {
+        if showSpeedHUD { return }
         switch type {
         case .seeking:
             showSeekHUD = true
@@ -386,6 +361,7 @@ struct PlayerView: View {
     }
     
     private func handlePanChanged(_ type: GestureType, translation: CGPoint) {
+        if showSpeedHUD { return }
         switch type {
         case .seeking:
             let width = UIScreen.main.bounds.width
@@ -410,6 +386,7 @@ struct PlayerView: View {
     }
     
     private func handlePanEnded(_ type: GestureType) {
+        if showSpeedHUD { return }
         switch type {
         case .seeking:
             showSeekHUD = false
@@ -421,6 +398,66 @@ struct PlayerView: View {
             showBrightnessHUD = false
         case .none: break
         }
+    }
+
+    private func handleLongPressBegan(location: CGPoint, size: CGSize) {
+        guard size.width > 0 else { return }
+        let sideZone = size.width * 0.28
+        guard location.x <= sideZone || location.x >= size.width - sideZone else {
+            speedGestureMode = .none
+            return
+        }
+        speedGestureMode = isSpeedLocked ? .unlocking : .locking
+        isSpeedingUp = true
+        showSpeedHUD = true
+        isCommandDeckVisible = false
+        setSpeed(2.0)
+    }
+
+    private func handleLongPressChanged(location: CGPoint, size: CGSize) {
+        guard speedGestureMode != .none, size.height > 0 else { return }
+        guard location.y >= size.height * 2 / 3 else { return }
+        let impact = UIImpactFeedbackGenerator(style: .medium)
+        impact.impactOccurred()
+        switch speedGestureMode {
+        case .locking:
+            isSpeedLocked = true
+            setSpeed(2.0)
+            speedGestureMode = .locked
+        case .unlocking:
+            isSpeedLocked = false
+            isSpeedingUp = false
+            setSpeed(1.0)
+            speedGestureMode = .none
+            showSpeedHUD = false
+        case .none, .locked:
+            break
+        }
+    }
+
+    private func handleLongPressEnded() {
+        switch speedGestureMode {
+        case .locking:
+            if !isSpeedLocked {
+                isSpeedingUp = false
+                setSpeed(1.0)
+            }
+            showSpeedHUD = false
+        case .unlocking:
+            if isSpeedLocked {
+                setSpeed(2.0)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    withAnimation { showSpeedHUD = false }
+                }
+            }
+        case .locked:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation { showSpeedHUD = false }
+            }
+        case .none:
+            break
+        }
+        speedGestureMode = .none
     }
 
     // MARK: - HUD Layer
@@ -447,7 +484,7 @@ struct PlayerView: View {
             VStack {
                 Spacer()
                 if showSpeedHUD {
-                    SpeedHUDView(isSpeedLocked: isSpeedLocked)
+                    SpeedHUDView(mode: speedGestureMode, isSpeedLocked: isSpeedLocked)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -471,8 +508,12 @@ struct PlayerView: View {
             return
         }
         player.becomeActive()
-        await resumeFromServerHistoryIfNeeded()
-        player.play()
+        resumeEntry = await loadResumeHistory()
+        await applyResumeWhenReady()
+        if !didStartPlayback {
+            didStartPlayback = true
+            player.play()
+        }
     }
 
     func stopPlayer() {
@@ -488,6 +529,10 @@ struct PlayerView: View {
     }
     
     func saveHistory() {
+        guard !client.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            syncMessage = "未绑定 API Key，无法同步历史"
+            return
+        }
         let position = progressTracker.time.seconds
         let duration = progressTracker.timeRange.duration.seconds
         guard position.isFinite, duration.isFinite, duration > 0 else { return }
@@ -514,12 +559,17 @@ struct PlayerView: View {
         }
     }
 
-    func resumeFromServerHistoryIfNeeded() async {
-        guard let entry = await loadResumeHistory(), entry.durationSeconds > 0 else { return }
+    @MainActor
+    func applyResumeWhenReady() async {
+        guard !didApplyResume, let entry = resumeEntry, entry.durationSeconds > 0 else { return }
+        let playerDuration = progressTracker.timeRange.duration.seconds
+        guard playerDuration.isFinite, playerDuration > 0 else { return }
         let position = min(max(entry.positionSeconds, 0), max(entry.durationSeconds - 1, 0))
         guard position > 5, position < entry.durationSeconds - 5 else { return }
         let target = CMTime(seconds: position, preferredTimescale: 600)
         player.seek(to: target)
+        progressTracker.progress = Float(position / playerDuration)
+        didApplyResume = true
         resumeMessage = "已从 \(formatTime(position)) 继续播放"
         try? await Task.sleep(for: .seconds(2.2))
         if resumeMessage != nil {
@@ -542,11 +592,13 @@ struct PlayerView: View {
         if playbackState == .ended || player.canReplay() {
             player.replay()
         } else {
+            if playbackState == .playing { saveHistory() }
             player.togglePlayPause()
         }
     }
 
     func toggleCommandDeck() {
+        guard !showSpeedHUD else { return }
         isCommandDeckVisible.toggle()
     }
 
@@ -557,6 +609,17 @@ struct PlayerView: View {
     func setSpeed(_ speed: Float) {
         currentSpeed = speed
         player.playbackSpeed = speed
+    }
+
+    func seekToFraction(_ fraction: CGFloat) {
+        let duration = progressTracker.timeRange.duration.seconds
+        guard duration.isFinite, duration > 0 else { return }
+        let clamped = min(max(Double(fraction), 0), 1)
+        let target = CMTime(seconds: duration * clamped, preferredTimescale: 600)
+        progressTracker.isInteracting = false
+        progressTracker.progress = Float(clamped)
+        player.seek(to: target)
+        saveHistory()
     }
 
     func formatTime(_ time: CMTime) -> String {
@@ -638,21 +701,45 @@ private struct ValueHUD: View {
     }
 }
 
+private enum SpeedGestureMode {
+    case none
+    case locking
+    case unlocking
+    case locked
+}
+
 private struct SpeedHUDView: View {
+    let mode: SpeedGestureMode
     let isSpeedLocked: Bool
     
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: isSpeedLocked ? "lock.fill" : "chevron.down")
+            Image(systemName: iconName)
                 .font(.system(size: 14))
             
-            Text(isSpeedLocked ? "已锁定 2 倍速" : "下滑松手锁定 2 倍速")
+            Text(text)
                 .font(.subheadline.weight(.medium))
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(Color.black.opacity(0.6), in: Capsule())
+    }
+
+    private var iconName: String {
+        if mode == .unlocking { return "lock.open.fill" }
+        return isSpeedLocked ? "lock.fill" : "chevron.down"
+    }
+
+    private var text: String {
+        switch mode {
+        case .unlocking:
+            return "下拉解锁 2 倍速"
+        case .locked:
+            return "已锁定 2 倍速"
+        case .locking, .none:
+            return "下拉锁定 2 倍速"
+        }
     }
 }
 
@@ -685,14 +772,15 @@ private struct PlayerBottomControls: View {
     let currentSpeed: Float
     let formatTime: (CMTime) -> String
     let togglePlay: () -> Void
-    let setSpeed: (Float) -> Void
+    let seekToFraction: (CGFloat) -> Void
     
     var body: some View {
         VStack(spacing: 20) {
             PlayerTimeline(
                 progressTracker: progressTracker,
                 buffer: buffer,
-                formatTime: formatTime
+                formatTime: formatTime,
+                seekToFraction: seekToFraction
             )
             
             HStack {
@@ -707,7 +795,12 @@ private struct PlayerBottomControls: View {
                 
                 Spacer()
                 
-                SpeedMenu(player: player, currentSpeed: currentSpeed, setSpeed: setSpeed)
+                Text(String(format: "%.2gx", currentSpeed))
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
             }
         }
     }
@@ -717,30 +810,50 @@ private struct PlayerTimeline: View {
     @ObservedObject var progressTracker: ProgressTracker
     let buffer: Float
     let formatTime: (CMTime) -> String
+    let seekToFraction: (CGFloat) -> Void
+    @State private var dragFraction: CGFloat?
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(formatTime(progressTracker.time))
+            Text(formatTime(displayTime))
                 .font(.caption2.monospacedDigit().weight(.medium))
                 .foregroundStyle(.white.opacity(0.8))
             
-            ZStack(alignment: .leading) {
-                GeometryReader { geometry in
+            GeometryReader { geometry in
+                let width = max(geometry.size.width, 1)
+                let available = progressTracker.isProgressAvailable
+                ZStack(alignment: .leading) {
                     Capsule()
                         .fill(.white.opacity(0.2))
-                        .frame(height: 3)
-                        .overlay(alignment: .leading) {
-                            Capsule()
-                                .fill(.white.opacity(0.4))
-                                .frame(width: geometry.size.width * CGFloat(buffer), height: 3)
-                        }
-                        .frame(maxHeight: .infinity)
+                        .frame(height: 4)
+                    Capsule()
+                        .fill(.white.opacity(0.4))
+                        .frame(width: width * CGFloat(buffer), height: 4)
+                    Capsule()
+                        .fill(Color(red: 0.12, green: 0.86, blue: 0.78))
+                        .frame(width: width * currentFraction, height: 4)
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 14, height: 14)
+                        .offset(x: max(0, min(width - 14, width * currentFraction - 7)))
                 }
-
-                Slider(progressTracker: progressTracker)
-                    .tint(Color(red: 0.12, green: 0.86, blue: 0.78))
-                    .disabled(!progressTracker.isProgressAvailable)
-                    .scaleEffect(y: 0.8) // Sleeker slider
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            guard available else { return }
+                            progressTracker.isInteracting = true
+                            dragFraction = fraction(for: value.location.x, width: width)
+                        }
+                        .onEnded { value in
+                            guard available else { return }
+                            let target = fraction(for: value.location.x, width: width)
+                            dragFraction = nil
+                            progressTracker.isInteracting = false
+                            seekToFraction(target)
+                        }
+                )
             }
             .frame(height: 24)
             
@@ -749,36 +862,23 @@ private struct PlayerTimeline: View {
                 .foregroundStyle(.white.opacity(0.8))
         }
     }
-}
 
-private struct SpeedMenu: View {
-    @ObservedObject var player: Player
-    let currentSpeed: Float
-    let setSpeed: (Float) -> Void
-    private let speeds: [Float] = [0.75, 1, 1.25, 1.5, 2]
-
-    var body: some View {
-        Menu {
-            ForEach(speeds, id: \.self) { speed in
-                Button {
-                    setSpeed(speed)
-                } label: {
-                    Label(speedLabel(speed), systemImage: currentSpeed == speed ? "checkmark" : "")
-                }
-                .disabled(!player.playbackSpeedRange.contains(speed))
-            }
-        } label: {
-            Text(speedLabel(currentSpeed))
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-        }
+    private var displayTime: CMTime {
+        guard let dragFraction else { return progressTracker.time }
+        let duration = progressTracker.timeRange.duration.seconds
+        guard duration.isFinite, duration > 0 else { return progressTracker.time }
+        return CMTime(seconds: duration * Double(dragFraction), preferredTimescale: 600)
     }
 
-    private func speedLabel(_ speed: Float) -> String {
-        String(format: "%.2gx", speed)
+    private var currentFraction: CGFloat {
+        if let dragFraction { return dragFraction }
+        let duration = progressTracker.timeRange.duration.seconds
+        guard duration.isFinite, duration > 0 else { return 0 }
+        return min(max(CGFloat(progressTracker.time.seconds / duration), 0), 1)
+    }
+
+    private func fraction(for x: CGFloat, width: CGFloat) -> CGFloat {
+        min(max(x / max(width, 1), 0), 1)
     }
 }
 

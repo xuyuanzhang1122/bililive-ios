@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RoomListView: View {
     @Environment(AppConfig.self) private var appConfig
+    @Environment(\.scenePhase) private var scenePhase
     @State private var vm: RoomListViewModel?
     @State private var showAddSheet = false
     @State private var addInput = ""
@@ -35,6 +36,12 @@ struct RoomListView: View {
                 let model = RoomListViewModel(client: appConfig.client)
                 vm = model
                 await model.load()
+                await refreshRoomsWhileVisible(model)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await vm?.load(useCache: false, silent: true) }
+                }
             }
             .alert("删除失败", isPresented: .constant(deleteError != nil), presenting: deleteError) { _ in
                 Button("好") { deleteError = nil }
@@ -127,6 +134,14 @@ struct RoomListView: View {
                 addError = error.localizedDescription
             }
             isAdding = false
+        }
+    }
+
+    private func refreshRoomsWhileVisible(_ model: RoomListViewModel) async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(10))
+            if Task.isCancelled { return }
+            await model.load(useCache: false, silent: true)
         }
     }
 }

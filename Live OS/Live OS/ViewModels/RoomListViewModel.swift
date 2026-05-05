@@ -13,15 +13,15 @@ final class RoomListViewModel {
     }
 
     @MainActor
-    func load() async {
+    func load(useCache: Bool = true, silent: Bool = false) async {
         let cacheKey = "RoomListLiveInfo"
         // 1. 先读取本地缓存，快速显示
-        if let cached: [LiveInfo] = CacheManager.shared.load(forKey: cacheKey, as: [LiveInfo].self), rooms.isEmpty {
+        if useCache, let cached: [LiveInfo] = CacheManager.shared.load(forKey: cacheKey, as: [LiveInfo].self), rooms.isEmpty {
             self.rooms = cached
         }
         
         // 2. 然后再去取最新数据
-        isLoading = rooms.isEmpty
+        isLoading = !silent && rooms.isEmpty
         errorMessage = nil
         do {
             let newRooms = try await client.getLives()
@@ -43,7 +43,7 @@ final class RoomListViewModel {
             url = try await client.resolveURL(url)
         }
         _ = try await client.addLive(url: url)
-        await load()
+        await load(useCache: false)
     }
 
     @MainActor
@@ -59,7 +59,7 @@ final class RoomListViewModel {
         if let index = rooms.firstIndex(where: { $0.id == room.id }) {
             rooms[index] = updatedRoom
         } else {
-            await load()
+            await load(useCache: false)
         }
     }
 }

@@ -4,15 +4,25 @@ struct VideoLibraryView: View {
     @Environment(AppConfig.self) private var appConfig
     @State private var vm: VideoLibraryViewModel?
 
-    let columns = [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)]
+    // 采用更宽的卡片布局，适配不同尺寸屏幕
+    let columns = [GridItem(.adaptive(minimum: 160, maximum: 300), spacing: 16)]
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                // 动态渐变背景
+                LinearGradient(
+                    colors: [Color(UIColor.systemGroupedBackground), Color.blue.opacity(0.05), Color.purple.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
                 if let vm {
                     libraryContent(vm)
                 } else {
                     ProgressView()
+                        .controlSize(.large)
                 }
             }
             .navigationTitle("视频库")
@@ -35,13 +45,14 @@ struct VideoLibraryView: View {
     private func libraryContent(_ vm: VideoLibraryViewModel) -> some View {
         if vm.isLoading && vm.rooms.isEmpty {
             ProgressView("加载中…")
+                .foregroundStyle(.secondary)
         } else if let err = vm.errorMessage {
             ContentUnavailableView("无法加载", systemImage: "exclamationmark.triangle", description: Text(err))
         } else if vm.rooms.isEmpty {
-            ContentUnavailableView("暂无录播", systemImage: "tray", description: Text("录播完成后会出现在这里"))
+            ContentUnavailableView("暂无录播", systemImage: "film", description: Text("录播完成后会出现在这里"))
         } else {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 12) {
+                LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(vm.rooms) { room in
                         NavigationLink(destination: VideoListView(room: room)) {
                             RoomCard(room: room, client: appConfig.client)
@@ -49,7 +60,8 @@ struct VideoLibraryView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
             .refreshable { await vm.load() }
         }
@@ -62,76 +74,85 @@ private struct RoomCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            AsyncImage(url: thumbnailURL) { phase in
-                switch phase {
-                case .success(let img):
-                    ZStack {
+            // 封面图区域
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: thumbnailURL) { phase in
+                    switch phase {
+                    case .success(let img):
                         img.resizable()
-                            .aspectRatio(16/9, contentMode: .fill)
-                            .blur(radius: 20)
-                            .scaleEffect(1.2)
-                        
-                        Color.black.opacity(0.3)
-                        
-                        img.resizable()
-                            .aspectRatio(contentMode: .fit)
-                        
-                        // Play Icon Overlay
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.white.opacity(0.8))
-                            .shadow(color: .black.opacity(0.5), radius: 4)
-                    }
-                    .aspectRatio(16/9, contentMode: .fill)
-                case .failure:
-                    placeholder
-                default:
-                    Color.secondary.opacity(0.15).aspectRatio(16/9, contentMode: .fill).overlay { ProgressView() }
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .clipped()
-            
-            // Bottom Info Container with slight blur
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Text(room.hostName)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    
-                    if room.recording {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 6, height: 6)
-                            Text("直播中")
+                            .scaledToFill()
+                    case .failure:
+                        placeholder
+                    default:
+                        ZStack {
+                            Color.secondary.opacity(0.1)
+                            ProgressView()
                         }
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Color.red.opacity(0.8), in: Capsule())
                     }
+                }
+                .frame(height: 200) // 固定高度，防止竖屏图片撑爆页面
+                .frame(maxWidth: .infinity)
+                .clipped()
+
+                // 直播状态标签 (Glassmorphism)
+                if room.recording {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 6, height: 6)
+                        Text("直播中")
+                            .font(.caption2.bold())
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .padding(8)
                 }
                 
+                // 播放图标居中悬浮
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(height: 200)
+
+            // 底部信息容器 (Glassmorphism 风格)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(room.hostName)
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                
                 HStack {
-                    Label("\(room.videoCount) 视频", systemImage: "film")
+                    Label("\(room.videoCount) 个视频", systemImage: "play.rectangle.on.rectangle")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                     
                     Spacer()
                     
                     Text(room.totalSizeFormatted)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.blue.opacity(0.8))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
-            .padding(12)
+            .padding(14)
+            .background(.regularMaterial) // 毛玻璃材质
         }
         .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
+        // 增加微微的白边，增强立体感
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(.white.opacity(0.2), lineWidth: 1)
+        )
     }
 
     private var thumbnailURL: URL? {
@@ -140,8 +161,11 @@ private struct RoomCard: View {
     }
 
     private var placeholder: some View {
-        Color.secondary.opacity(0.15)
-            .aspectRatio(16/9, contentMode: .fill)
-            .overlay { Image(systemName: "video").font(.largeTitle).foregroundStyle(.secondary) }
+        Color.secondary.opacity(0.1)
+            .overlay {
+                Image(systemName: "photo.tv")
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+            }
     }
 }

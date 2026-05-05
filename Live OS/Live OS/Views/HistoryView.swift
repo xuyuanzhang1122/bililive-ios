@@ -69,15 +69,16 @@ private struct HistoryCard: View {
             AsyncImage(url: client.thumbnailURL(for: entry.videoPath)) { phase in
                 switch phase {
                 case .success(let img):
-                    img.resizable().aspectRatio(16/9, contentMode: .fill)
+                    img.resizable().scaledToFill()
                 case .failure:
                     placeholder
                 default:
-                    Color.secondary.opacity(0.15).aspectRatio(16/9, contentMode: .fill)
+                    Color.secondary.opacity(0.15)
                         .overlay { ProgressView() }
                 }
             }
-            .frame(width: 140)
+            .frame(width: 140, height: 78)
+            .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 10))
             
             // Info
@@ -132,7 +133,6 @@ private struct HistoryCard: View {
 
     private var placeholder: some View {
         Color.secondary.opacity(0.15)
-            .aspectRatio(16/9, contentMode: .fill)
             .overlay { Image(systemName: "video.slash").foregroundStyle(.secondary) }
     }
 
