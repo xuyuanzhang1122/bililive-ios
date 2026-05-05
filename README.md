@@ -2,7 +2,7 @@
 
 这是 `bililive-go-UI` 的专属 iOS 客户端，用于管理录播服务、查看录播视频、并通过内嵌原生高性能播放器随时随地观看录制好的视频。
 
-![首页预览](https://github.com/user-attachments/assets/请在此处替换你的首页预览链接)
+![首页预览]((https://github.com/user-attachments/assets/08ec37f5-003b-47a1-8b64-615e5935095f))
 
 ## ✨ 核心特性
 
@@ -22,9 +22,9 @@
 ## 📸 应用截图
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/请在此处替换你的视频库截图链接" width="30%" />
-  <img src="https://github.com/user-attachments/assets/请在此处替换你的添加直播间截图链接" width="30%" />
-  <img src="https://github.com/user-attachments/assets/请在此处替换你的设置页截图链接" width="30%" />
+  <img src="https://github.com/user-attachments/assets/1d011f72-d2b9-4744-891e-8e211e8642fc" width="30%" />
+  <img src="https://github.com/user-attachments/assets/452a5da9-5592-41e4-ad9c-97ebad94d18d" width="30%" />
+  <img src="https://github.com/user-attachments/assets/14cfca0e-d538-491d-8d44-0738edcc4341" width="30%" />
 </p>
 
 ## ⚙️ 配合服务端使用
