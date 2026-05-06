@@ -29,7 +29,7 @@
 
 ## ⚙️ 配合服务端使用
 
-此客户端是整个监控生态的终端，必须配合 [bililive-go-UI](https://github.com/xuyuanzhang1122/bililive-go-UI) 以及公网分发层服务器配合使用。
+此客户端是整个监控生态的终端，必须配合 [bililive-go-UI](https://github.com/xuyuanzhang1122/bililive-go-UI) 以及公网分发层服务器`（当您选择屏蔽时，恢复与备份功能不可用外其他功能正常）`配合使用。
 
 1. **部署后端与公网入口**：在服务器上启动 `bililive-go-UI`，并配置好 Nginx/frp 或类似 `image.xumy.art` 的公网访问域名。
 2. **开启多用户鉴权**：在服务端的 Web UI 设置中开启 API Key。
