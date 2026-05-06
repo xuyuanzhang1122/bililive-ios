@@ -174,6 +174,7 @@ struct PlayerView: View {
     @State private var showSeekHUD = false
     @State private var seekTargetTime: CMTime = .zero
     @State private var seekDeltaSeconds: Double = 0
+    @State private var panSeekStartTime: CMTime = .zero
     
     @State private var showVolumeHUD = false
     @State private var initialVolume: Float = 0
@@ -345,6 +346,7 @@ struct PlayerView: View {
         switch type {
         case .seeking:
             showSeekHUD = true
+            panSeekStartTime = progressTracker.time  // lock start; progressTracker.time freezes once isInteracting=true
             seekTargetTime = progressTracker.time
             seekDeltaSeconds = 0
             progressTracker.isInteracting = true
@@ -365,10 +367,21 @@ struct PlayerView: View {
         switch type {
         case .seeking:
             let width = UIScreen.main.bounds.width
-            seekDeltaSeconds = Double(translation.x / width) * 90.0
-            seekTargetTime = CMTimeAdd(progressTracker.time, CMTime(seconds: seekDeltaSeconds, preferredTimescale: 600))
-            if seekTargetTime < .zero { seekTargetTime = .zero }
-            if seekTargetTime > progressTracker.timeRange.duration { seekTargetTime = progressTracker.timeRange.duration }
+            let duration = progressTracker.timeRange.duration.seconds
+            // Scale with video duration: 15% of total per full-screen swipe, clamped 30–300 s
+            let seekRange = (duration.isFinite && duration > 0)
+                ? min(max(duration * 0.15, 30), 300)
+                : 90.0
+            seekDeltaSeconds = Double(translation.x / width) * seekRange
+            // Always compute from locked start time so translation.x deltas don't accumulate
+            var target = CMTimeAdd(panSeekStartTime, CMTime(seconds: seekDeltaSeconds, preferredTimescale: 600))
+            if target < .zero { target = .zero }
+            if target > progressTracker.timeRange.duration { target = progressTracker.timeRange.duration }
+            seekTargetTime = target
+            // Sync progress bar so it moves in real time
+            if duration.isFinite && duration > 0 {
+                progressTracker.progress = Float(target.seconds / duration)
+            }
         case .volume:
             let delta = Float(-translation.y / 200.0)
             var newVol = initialVolume + delta
@@ -390,8 +403,7 @@ struct PlayerView: View {
         switch type {
         case .seeking:
             showSeekHUD = false
-            player.seek(to: seekTargetTime)
-            progressTracker.isInteracting = false
+            progressTracker.isInteracting = false  // ProgressTracker seeks to the progress we set during pan
         case .volume:
             showVolumeHUD = false
         case .brightness:
@@ -508,12 +520,12 @@ struct PlayerView: View {
             return
         }
         player.becomeActive()
-        resumeEntry = await loadResumeHistory()
-        await applyResumeWhenReady()
         if !didStartPlayback {
             didStartPlayback = true
             player.play()
         }
+        resumeEntry = await loadResumeHistory()
+        await applyResumeWhenReady()
     }
 
     func stopPlayer() {
@@ -937,15 +949,17 @@ private struct PlayerBackdrop: View {
     let thumbnailURL: URL?
     let isPlaying: Bool
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            AsyncImage(url: thumbnailURL) { phase in
-                if case .success(let image) = phase {
-                    image.resizable().scaledToFill().blur(radius: 40).opacity(0.4)
+        Color.black
+            .ignoresSafeArea()
+            .overlay {
+                AsyncImage(url: thumbnailURL) { phase in
+                    if case .success(let image) = phase {
+                        image.resizable().scaledToFill().blur(radius: 40).opacity(0.4)
+                    }
                 }
             }
+            .clipped()
             .ignoresSafeArea()
-        }
     }
 }
 

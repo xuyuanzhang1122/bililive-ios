@@ -5,6 +5,7 @@ final class VideoLibraryViewModel {
     var rooms: [VideoRoomInfo] = []
     var isLoading = false
     var errorMessage: String?
+    var thumbnailRefreshToken: Int = 0
 
     private let client: APIClient
 
@@ -15,11 +16,21 @@ final class VideoLibraryViewModel {
     @MainActor
     func load() async {
         let cacheKey = "VideoLibraryRooms"
+        // On manual refresh (rooms already loaded), invalidate thumbnails
+        if !rooms.isEmpty {
+            let urls = rooms.compactMap { room -> URL? in
+                guard let latest = room.latestVideo else { return nil }
+                return client.thumbnailURL(for: latest)
+            }
+            ThumbnailCache.shared.invalidate(urls: urls)
+            thumbnailRefreshToken += 1
+        }
+
         // 1. 先读取本地缓存，快速显示
         if let cached: [VideoRoomInfo] = CacheManager.shared.load(forKey: cacheKey, as: [VideoRoomInfo].self), rooms.isEmpty {
             self.rooms = cached
         }
-        
+
         // 2. 然后再去取最新数据
         isLoading = rooms.isEmpty
         errorMessage = nil
@@ -43,6 +54,7 @@ final class VideoListViewModel {
     var isLoading = false
     var errorMessage: String?
     var selection: Set<String> = []
+    var thumbnailRefreshToken: Int = 0
 
     private let client: APIClient
     let room: VideoRoomInfo
@@ -54,12 +66,20 @@ final class VideoListViewModel {
 
     @MainActor
     func load() async {
-        let cacheKey = "VideoListFiles_\(room.folderPath.hashValue)"
+        // Use stable cache key (hashValue is not stable across launches)
+        let cacheKey = "VideoListFiles_" + room.folderPath
+        // On manual refresh (files already loaded), invalidate thumbnails
+        if !files.isEmpty {
+            let urls = files.compactMap { client.thumbnailURL(for: $0) }
+            ThumbnailCache.shared.invalidate(urls: urls)
+            thumbnailRefreshToken += 1
+        }
+
         // 1. 先读取本地缓存，快速显示
         if let cached: [VideoFileInfo] = CacheManager.shared.load(forKey: cacheKey, as: [VideoFileInfo].self), files.isEmpty {
             self.files = cached
         }
-        
+
         // 2. 然后再去取最新数据
         isLoading = files.isEmpty
         errorMessage = nil

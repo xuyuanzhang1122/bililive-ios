@@ -21,6 +21,9 @@ struct SettingsView: View {
                 // MARK: 认证
                 authSection
 
+                // MARK: 存储
+                storageSection
+
                 // MARK: 关于
                 aboutSection
             }
@@ -130,6 +133,37 @@ struct SettingsView: View {
         } footer: {
             Text("服务器启用 security.enable_api_key 后需要填写。")
         }
+    }
+
+    private var storageSection: some View {
+        Section {
+            NavigationLink(destination: StorageManagementView()) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("存储管理")
+                        Text(storageSummary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "internaldrive.fill")
+                        .foregroundStyle(.purple)
+                }
+            }
+        } header: {
+            Text("存储")
+        }
+    }
+
+    private var storageSummary: String {
+        let total = ThumbnailCache.shared.diskSizeBytes + CacheManager.shared.cacheDirectorySizeBytes
+        return "已用 \(formatBytes(total))"
+    }
+
+    private func formatBytes(_ bytes: Int) -> String {
+        let mb = Double(bytes) / 1_048_576
+        if mb < 1 { return "\(bytes / 1024) KB" }
+        return String(format: "%.1f MB", mb)
     }
 
     private var aboutSection: some View {
@@ -579,5 +613,102 @@ private struct BoundKeyCard: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(.white.opacity(0.75), in: Capsule())
+    }
+}
+
+// MARK: - Storage Management
+
+struct StorageManagementView: View {
+    @State private var thumbnailBytes: Int = 0
+    @State private var apiCacheBytes: Int = 0
+    @State private var showClearConfirm = false
+    @State private var justCleared = false
+
+    var body: some View {
+        List {
+            Section {
+                cacheRow(label: "缩略图缓存", bytes: thumbnailBytes, icon: "photo.stack.fill", color: .blue)
+                cacheRow(label: "接口数据缓存", bytes: apiCacheBytes, icon: "network", color: .teal)
+
+                HStack {
+                    Label {
+                        Text("合计")
+                            .fontWeight(.semibold)
+                    } icon: {
+                        Image(systemName: "sum")
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(formatBytes(thumbnailBytes + apiCacheBytes))
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                }
+            } header: {
+                Text("缓存占用")
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    showClearConfirm = true
+                } label: {
+                    Label("清除所有缓存", systemImage: "trash.fill")
+                }
+            } footer: {
+                Text("清除后，缩略图和接口数据将在下次访问时重新从服务器加载。")
+            }
+        }
+        .navigationTitle("存储管理")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { refreshSizes() }
+        .confirmationDialog("确认清除全部缓存？", isPresented: $showClearConfirm, titleVisibility: .visible) {
+            Button("清除", role: .destructive) {
+                ThumbnailCache.shared.clearAll()
+                CacheManager.shared.clearAll()
+                refreshSizes()
+                justCleared = true
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    justCleared = false
+                }
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .overlay(alignment: .bottom) {
+            if justCleared {
+                Text("已清除")
+                    .font(.subheadline)
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: justCleared)
+    }
+
+    private func cacheRow(label: String, bytes: Int, icon: String, color: Color) -> some View {
+        HStack {
+            Label {
+                Text(label)
+            } icon: {
+                Image(systemName: icon)
+                    .foregroundStyle(color)
+            }
+            Spacer()
+            Text(formatBytes(bytes))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+    }
+
+    private func refreshSizes() {
+        thumbnailBytes = ThumbnailCache.shared.diskSizeBytes
+        apiCacheBytes = CacheManager.shared.cacheDirectorySizeBytes
+    }
+
+    private func formatBytes(_ bytes: Int) -> String {
+        let mb = Double(bytes) / 1_048_576
+        if mb < 1 { return "\(max(bytes / 1024, 0)) KB" }
+        return String(format: "%.1f MB", mb)
     }
 }
