@@ -51,6 +51,16 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ipa/LiveOS.ipa
-          tag: v1.1
+          tag: v1.2
           overwrite: true
-          body: "Unsigned iOS IPA build"
+          body: |
+            ## v1.2 更新内容
+
+            - ✨ 新增：品牌冷启动动效，双图标合并 + 闪电劈落特效
+            - 📷 新增：缩略图本地会话缓存，减少重复请求服务端
+            - 💾 新增：设置页存储管理，查看缓存占用与一键清除
+            - 🎚️ 修复：左右滑动调整播放进度不同步的问题
+            - 🖼️ 修复：横屏直播间缩略图撑破布局的问题
+            - ▶️ 修复：首次播放仅显示第一帧且页面被放大的问题
+
+            > Unsigned IPA，需通过 AltStore / Sideloadly / 企业证书安装

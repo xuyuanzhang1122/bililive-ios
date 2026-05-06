@@ -1,0 +1,21 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>bililive Lightning Bolt Layer - Visible</title>
+  <defs>
+    <filter id="whiteGlow" x="-45%" y="-45%" width="190%" height="190%">
+      <feGaussianBlur stdDeviation="8" result="blur1"/>
+      <feGaussianBlur stdDeviation="18" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g id="lightning-glow" filter="url(#whiteGlow)" opacity="1">
+    <path d="M573 112L336 506H486L438 904L686 468H540L573 112Z" fill="#FFFFFF"/>
+  </g>
+
+  <path id="lightning-bolt" d="M573 112L336 506H486L438 904L686 468H540L573 112Z" fill="#FFFFFF"/>
+  <path id="lightning-highlight" d="M559 162L376 484H506L472 758L637 478H522L559 162Z" fill="#FFFFFF" opacity="0.34"/>
+</svg>

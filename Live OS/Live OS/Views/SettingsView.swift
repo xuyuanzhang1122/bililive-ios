@@ -741,6 +741,25 @@ struct AboutVersionView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 12) {
+                    Text("1.2 版本更新内容")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .padding(.bottom, 4)
+
+                    changelogItem(icon: "bolt.fill", color: .purple, text: "新增：品牌冷启动动效，双图标合并 + 闪电劈落特效")
+                    changelogItem(icon: "photo.on.rectangle.angled", color: .green, text: "新增：缩略图本地会话缓存，减少重复请求服务端")
+                    changelogItem(icon: "externaldrive.fill", color: .blue, text: "新增：设置页存储管理，查看缓存占用与一键清除")
+                    changelogItem(icon: "slider.horizontal.3", color: .teal, text: "修复：左右滑动调整播放进度不同步的问题")
+                    changelogItem(icon: "rectangle.fill.on.rectangle.fill", color: .orange, text: "修复：横屏直播间缩略图撑破布局的问题")
+                    changelogItem(icon: "play.rectangle.fill", color: .red, text: "修复：首次播放仅显示第一帧且页面被放大的问题")
+                }
+                .padding(.vertical, 8)
+            } header: {
+                Text("更新日志")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("1.1 版本更新内容")
                         .font(.headline)
                         .foregroundStyle(.primary)
@@ -754,8 +773,6 @@ struct AboutVersionView: View {
                     changelogItem(icon: "ant.fill", color: .red, text: "修复：视频库缩略图在特定比例下过大撑爆页面的问题")
                 }
                 .padding(.vertical, 8)
-            } header: {
-                Text("更新日志")
             } footer: {
                 Text("感谢您使用 Live OS，我们将持续为您带来更好的录播观看体验！")
                     .padding(.top, 16)

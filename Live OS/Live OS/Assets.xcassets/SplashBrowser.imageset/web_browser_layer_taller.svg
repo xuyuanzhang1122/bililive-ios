@@ -1,0 +1,43 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>bililive Web Browser Layer - Taller</title>
+  <defs>
+    <filter id="pinkGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="10" result="blur1"/>
+      <feGaussianBlur stdDeviation="24" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="pinkStroke" x1="180" y1="160" x2="760" y2="860" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF96E4"/>
+      <stop offset="0.45" stop-color="#FF30BC"/>
+      <stop offset="1" stop-color="#FF5FD2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer glow -->
+  <g id="web-glow" filter="url(#pinkGlow)" opacity="0.94">
+    <rect x="210" y="150" width="604" height="724" rx="68" stroke="#FF39C8" stroke-width="24"/>
+    <line x1="210" y1="318" x2="814" y2="318" stroke="#FF39C8" stroke-width="24" stroke-linecap="round"/>
+    <circle cx="306" cy="236" r="20" fill="#FF39C8"/>
+    <circle cx="378" cy="236" r="20" fill="#FF39C8"/>
+    <circle cx="450" cy="236" r="20" fill="#FF39C8"/>
+  </g>
+
+  <!-- Crisp stroke -->
+  <g id="web-browser" stroke="url(#pinkStroke)" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="210" y="150" width="604" height="724" rx="68" stroke-width="16"/>
+    <line x1="210" y1="318" x2="814" y2="318" stroke-width="16"/>
+    <circle cx="306" cy="236" r="18" fill="#FF61D7" stroke-width="8"/>
+    <circle cx="378" cy="236" r="18" fill="#FF61D7" stroke-width="8"/>
+    <circle cx="450" cy="236" r="18" fill="#FF61D7" stroke-width="8"/>
+  </g>
+
+  <!-- Highlight -->
+  <g id="web-highlight" opacity="0.7">
+    <rect x="227" y="167" width="570" height="690" rx="52" stroke="#FFD8F6" stroke-width="4"/>
+    <line x1="227" y1="300" x2="797" y2="300" stroke="#FFD8F6" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,34 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>bililive iOS Phone Layer - Taller</title>
+  <defs>
+    <filter id="blueGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="10" result="blur1"/>
+      <feGaussianBlur stdDeviation="24" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="blueStroke" x1="320" y1="120" x2="760" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#A0F4FF"/>
+      <stop offset="0.5" stop-color="#14CCFF"/>
+      <stop offset="1" stop-color="#1A8FFF"/>
+    </linearGradient>
+  </defs>
+
+  <g id="phone-glow" filter="url(#blueGlow)" opacity="0.98">
+    <rect x="322" y="120" width="380" height="784" rx="82" stroke="#12C8FF" stroke-width="24"/>
+    <path d="M431 120V142C431 174.585 457.415 201 490 201H534C566.585 201 593 174.585 593 142V120" stroke="#12C8FF" stroke-width="24" stroke-linecap="round"/>
+    <rect x="716" y="402" width="22" height="132" rx="11" fill="#9AECFF"/>
+  </g>
+
+  <g id="phone-outline" stroke="url(#blueStroke)" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="322" y="120" width="380" height="784" rx="82" stroke-width="16"/>
+    <path d="M431 120V142C431 174.585 457.415 201 490 201H534C566.585 201 593 174.585 593 142V120" stroke-width="16"/>
+  </g>
+
+  <g id="phone-highlight" opacity="0.78">
+    <rect x="338" y="136" width="348" height="752" rx="66" stroke="#DDFBFF" stroke-width="4"/>
+  </g>
+</svg>

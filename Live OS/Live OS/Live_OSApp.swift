@@ -16,10 +16,20 @@ struct Live_OSApp: App {
         URLCache.shared = cache
     }
 
+    @State private var showLaunch = true
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(appConfig)
+            ZStack {
+                ContentView()
+                    .environment(appConfig)
+                if showLaunch {
+                    LaunchScreenView {
+                        showLaunch = false
+                    }
+                    .zIndex(1)
+                }
+            }
         }
     }
 }
