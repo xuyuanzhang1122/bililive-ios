@@ -168,17 +168,38 @@ struct SettingsView: View {
 
     private var aboutSection: some View {
         Section {
-            Label {
-                HStack {
-                    Text("版本")
-                    Spacer()
-                    Text(appVersion).foregroundStyle(.secondary)
+            NavigationLink(destination: AboutVersionView()) {
+                Label {
+                    HStack {
+                        Text("版本")
+                        Spacer()
+                        Text(appVersion).foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundStyle(.blue)
                 }
-            } icon: {
-                Image(systemName: "info.circle")
-                    .foregroundStyle(.secondary)
             }
 
+            Link(destination: URL(string: "https://github.com/xuyuanzhang1122/bililive-ios")!) {
+                Label {
+                    Text("GitHub 开源项目")
+                        .foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "link")
+                        .foregroundStyle(.blue)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Text("由 Xumy 开发")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         } header: {
             Text("关于")
         }
@@ -710,5 +731,49 @@ struct StorageManagementView: View {
         let mb = Double(bytes) / 1_048_576
         if mb < 1 { return "\(max(bytes / 1024, 0)) KB" }
         return String(format: "%.1f MB", mb)
+    }
+}
+
+// MARK: - About / Version Changelog
+
+struct AboutVersionView: View {
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("1.1 版本更新内容")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .padding(.bottom, 4)
+
+                    changelogItem(icon: "sparkles", color: .purple, text: "新增：全新玻璃拟物化 (Glassmorphism) 主页设计")
+                    changelogItem(icon: "key.fill", color: .orange, text: "新增：支持服务端多用户 API Key 鉴权及进度隔离")
+                    changelogItem(icon: "app.dashed", color: .blue, text: "新增：自适应 iOS 18 暗黑及染色模式的极客图标")
+                    changelogItem(icon: "arrow.triangle.2.circlepath", color: .green, text: "优化：重构云端备份及播放进度双向同步逻辑")
+                    changelogItem(icon: "hand.point.up.left.fill", color: .teal, text: "优化：加入全局触觉震动反馈 (Haptics)")
+                    changelogItem(icon: "ant.fill", color: .red, text: "修复：视频库缩略图在特定比例下过大撑爆页面的问题")
+                }
+                .padding(.vertical, 8)
+            } header: {
+                Text("更新日志")
+            } footer: {
+                Text("感谢您使用 Live OS，我们将持续为您带来更好的录播观看体验！")
+                    .padding(.top, 16)
+            }
+        }
+        .navigationTitle("版本信息")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func changelogItem(icon: String, color: Color, text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 20)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
     }
 }
