@@ -10,25 +10,32 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppConfig.self) private var appConfig
 
+    @State private var selectedTab: Int = 0
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             VideoLibraryView()
                 .tabItem {
                     Label("视频库", systemImage: "play.rectangle.on.rectangle")
                 }
+                .tag(0)
             RoomListView()
                 .tabItem {
                     Label("直播间", systemImage: "antenna.radiowaves.left.and.right")
                 }
+                .tag(1)
             HistoryView()
                 .tabItem {
                     Label("历史", systemImage: "clock")
                 }
+                .tag(2)
             SettingsView(isInitialSetup: false)
                 .tabItem {
                     Label("设置", systemImage: "gear")
                 }
+                .tag(3)
         }
+        .sensoryFeedback(.selection, trigger: selectedTab)
         .tint(Color(red: 0.12, green: 0.86, blue: 0.78)) // A modern teal/cyan accent color
         .overlay(alignment: .top) {
             if appConfig.activeURL.isEmpty {
