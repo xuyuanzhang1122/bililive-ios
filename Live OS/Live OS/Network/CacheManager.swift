@@ -54,6 +54,17 @@ final class CacheManager {
         }
     }
 
+    func clearAll() {
+        guard let files = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil) else { return }
+        files.forEach { try? fileManager.removeItem(at: $0) }
+    }
+
+    var cacheDirectorySizeBytes: Int {
+        let files = (try? fileManager.contentsOfDirectory(
+            at: cacheDirectory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        return files.compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }.reduce(0, +)
+    }
+
     /// 清理所有过期缓存文件
     private func cleanExpiredCache() {
         guard let files = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }

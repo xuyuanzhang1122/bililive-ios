@@ -45,7 +45,7 @@ struct VideoListView: View {
         } else {
             List(selection: $vm.selection) {
                 ForEach(vm.files) { file in
-                    FileRow(file: file, client: appConfig.client, history: vm.historyByPath[file.relPath])
+                    FileRow(file: file, client: appConfig.client, history: vm.historyByPath[file.relPath], thumbnailRefreshToken: vm.thumbnailRefreshToken)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             if editMode == .inactive { selectedFile = file }
@@ -95,10 +95,11 @@ private struct FileRow: View {
     let file: VideoFileInfo
     let client: APIClient
     let history: HistoryEntry?
+    let thumbnailRefreshToken: Int
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncImage(url: client.thumbnailURL(for: file)) { phase in
+            CachedAsyncImage(url: client.thumbnailURL(for: file), refreshToken: thumbnailRefreshToken) { phase in
                 if case .success(let img) = phase {
                     img.resizable()
                         .scaledToFill()

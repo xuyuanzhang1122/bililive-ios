@@ -55,7 +55,7 @@ struct VideoLibraryView: View {
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(vm.rooms) { room in
                         NavigationLink(destination: VideoListView(room: room)) {
-                            RoomCard(room: room, client: appConfig.client)
+                            RoomCard(room: room, client: appConfig.client, thumbnailRefreshToken: vm.thumbnailRefreshToken)
                         }
                         .buttonStyle(.plain)
                     }
@@ -71,28 +71,30 @@ struct VideoLibraryView: View {
 private struct RoomCard: View {
     let room: VideoRoomInfo
     let client: APIClient
+    let thumbnailRefreshToken: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 封面图区域
             ZStack(alignment: .topTrailing) {
-                AsyncImage(url: thumbnailURL) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholder
-                    default:
-                        ZStack {
-                            Color.secondary.opacity(0.1)
-                            ProgressView()
+                Color.clear.aspectRatio(16/9, contentMode: .fit)
+                    .overlay {
+                        CachedAsyncImage(url: thumbnailURL, refreshToken: thumbnailRefreshToken) { phase in
+                            switch phase {
+                            case .success(let img):
+                                img.resizable()
+                                    .scaledToFill()
+                            case .failure:
+                                placeholder
+                            default:
+                                ZStack {
+                                    Color.secondary.opacity(0.1)
+                                    ProgressView()
+                                }
+                            }
                         }
                     }
-                }
-                .frame(height: 200) // 固定高度，防止竖屏图片撑爆页面
-                .frame(maxWidth: .infinity)
-                .clipped()
+                    .clipped()
 
                 // 直播状态标签 (Glassmorphism)
                 if room.recording {
@@ -110,7 +112,7 @@ private struct RoomCard: View {
                     .clipShape(Capsule())
                     .padding(8)
                 }
-                
+
                 // 播放图标居中悬浮
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: 44))
@@ -118,7 +120,6 @@ private struct RoomCard: View {
                     .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(height: 200)
 
             // 底部信息容器 (Glassmorphism 风格)
             VStack(alignment: .leading, spacing: 8) {
