@@ -43,7 +43,7 @@
 本项目暂未提供 App Store 分发，请按照以下方式安装：
 
 ### 方案 A：下载自动构建的 IPA (推荐)
-前往本仓库的 **[Releases](https://github.com/xuyuanzhang1122/bililive-ios/releases)** 页面，下载由 GitHub Actions 自动构建好的 `.ipa` 文件。
+前往本仓库的 **[Releases](https://github.com/xuyuanzhang1122/bililive-ios/releases)** 页面，下载为您构建好的 `.ipa` 文件。
 > **注意**：下载的 IPA 文件未经过企业签名，无法直接在 iOS 上安装。你需要自行使用 **AltStore**、**Sideloadly** 或 **爱思助手** 等工具进行个人签名并安装。
 
 ### 方案 B：使用 Xcode 自行编译
