@@ -758,6 +758,26 @@ struct AboutVersionView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 12) {
+                    Text("2.0 版本更新内容")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .padding(.bottom, 4)
+
+                    changelogItem(icon: "externaldrive.badge.icloud", color: .blue, text: "新增：备份服务器（源站）支持，远端备份独立存储，服务器重装后凭 ID 一键找回")
+                    changelogItem(icon: "arrow.clockwise.icloud", color: .teal, text: "新增：恢复备份自动写入服务端配置并重启，重启后双端自动同步")
+                    changelogItem(icon: "square.and.arrow.up", color: .purple, text: "新增：直播间页一键导出/备份，本地文件 + 远端 ID 双重保障")
+                    changelogItem(icon: "clock.arrow.circlepath", color: .green, text: "修复：观看历史续播失效，现在精确从上次位置继续播放")
+                    changelogItem(icon: "photo.fill", color: .orange, text: "修复：观看历史缩略图变形（服务端像素比修复）")
+                    changelogItem(icon: "gauge.with.needle", color: .red, text: "优化：倍速菜单可点击调速，长按两侧下拉锁定 2x 防误触")
+                    changelogItem(icon: "dot.radiowaves.left.and.right", color: .pink, text: "优化：直播中标识自动刷新，直播结束即时转变")
+                }
+                .padding(.vertical, 8)
+            } header: {
+                Text("更新日志")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("1.2 版本更新内容")
                         .font(.headline)
                         .foregroundStyle(.primary)
@@ -771,8 +791,6 @@ struct AboutVersionView: View {
                     changelogItem(icon: "play.rectangle.fill", color: .red, text: "修复：首次播放仅显示第一帧且页面被放大的问题")
                 }
                 .padding(.vertical, 8)
-            } header: {
-                Text("更新日志")
             }
 
             Section {
