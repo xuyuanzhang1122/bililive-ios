@@ -939,7 +939,8 @@ private struct PlayerTimeline: View {
                         .offset(x: max(0, min(width - 14, width * currentFraction - 7)))
                 }
                 .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
+                // 命中区垂直外扩到 44pt 标准触控尺寸，视觉高度保持不变；点击（零位移拖动）即跳转
+                .contentShape(Rectangle().inset(by: -10))
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
