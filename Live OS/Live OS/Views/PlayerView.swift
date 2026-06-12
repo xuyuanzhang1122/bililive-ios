@@ -5,6 +5,14 @@ import MediaPlayer
 import PillarboxPlayer
 import SwiftUI
 
+// MARK: - Screen Access
+/// iOS 26 起 `UIScreen.main` 已废弃，改用当前前台 window scene 关联的屏幕。
+@MainActor
+func activeScreen() -> UIScreen? {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    return (scenes.first { $0.activationState == .foregroundActive } ?? scenes.first)?.screen
+}
+
 // MARK: - Volume Manager
 final class VolumeManager: ObservableObject {
     static let shared = VolumeManager()
@@ -165,6 +173,7 @@ struct PlayerView: View {
     @State private var isBusy = false
     @State private var buffer: Float = 0
     @State private var currentSpeed: Float = 1
+    @State private var baseSpeed: Float = 1
     @State private var isCommandDeckVisible = true
     @State private var errorMessage: String?
     @State private var resumeMessage: String?
@@ -182,14 +191,18 @@ struct PlayerView: View {
     
     @State private var showBrightnessHUD = false
     @State private var initialBrightness: CGFloat = 0
-    @State private var currentBrightness: CGFloat = UIScreen.main.brightness
+    @State private var currentBrightness: CGFloat = 0.5
+    @State private var viewWidth: CGFloat = 0
     
     @State private var isSpeedingUp = false
     @State private var isSpeedLocked = false
+    @State private var speedPressStartY: CGFloat = 0
     @State private var showSpeedHUD = false
     @State private var speedGestureMode: SpeedGestureMode = .none
     @State private var resumeEntry: HistoryEntry?
     @State private var didApplyResume = false
+    /// 续播决议（应用成功 / 确认无需续播）前禁止上报历史，避免把服务端旧进度覆盖成片头位置
+    @State private var isResumeSettled = false
     @State private var didStartPlayback = false
     
     let saveHistoryTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
@@ -218,8 +231,19 @@ struct PlayerView: View {
             _errorMessage = State(initialValue: nil)
         } else {
             _player = StateObject(wrappedValue: Player())
-            _errorMessage = State(initialValue: "正在录制，请稍后")
+            _errorMessage = State(initialValue: Self.failureMessage(for: file))
         }
+    }
+
+    /// 播放失败提示按文件状态区分：录制中 / 处理中 / 其他
+    static func failureMessage(for file: VideoFileInfo) -> String {
+        if file.recording == true || file.playbackStatus == "recording" {
+            return "正在录制，请稍后"
+        }
+        if file.playbackStatus == "processing" {
+            return "正在处理，请稍后"
+        }
+        return "视频暂时无法播放"
     }
 
     var body: some View {
@@ -276,7 +300,7 @@ struct PlayerView: View {
                             .font(.system(size: 40, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 80, height: 80)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .floatingGlass(in: Circle(), interactive: true)
                             .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 1))
                     }
                     .buttonStyle(PressableButtonStyle())
@@ -303,13 +327,16 @@ struct PlayerView: View {
                         currentSpeed: currentSpeed,
                         formatTime: formatTime,
                         togglePlay: togglePlay,
-                        seekToFraction: seekToFraction
+                        seekToFraction: seekToFraction,
+                        setSpeed: setSpeed
                     )
                     .opacity(isCommandDeckVisible ? 1 : 0)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 0)
                 .padding(.bottom, 8)
+                // opacity(0) 的视图仍会参与命中测试，隐藏时必须显式关掉，否则吞掉手势层的点击
+                .allowsHitTesting(isCommandDeckVisible)
             } else if let errorMessage {
                 PlayerErrorState(message: errorMessage, dismiss: closePlayer)
                     .padding(24)
@@ -320,13 +347,29 @@ struct PlayerView: View {
         .onReceive(player: player, assign: \.isBusy, to: $isBusy)
         .onReceive(player: player, assign: \.buffer, to: $buffer)
         .onReceive(player.$error.compactMap { $0?.localizedDescription }) { _ in
-            errorMessage = "正在录制，请稍后"
+            errorMessage = Self.failureMessage(for: file)
         }
         .onReceive(saveHistoryTimer) { _ in
             if isPlaying { saveHistory() }
         }
         .onChange(of: progressTracker.timeRange.duration.seconds) { _, _ in
             Task { await applyResumeWhenReady() }
+        }
+        .onChange(of: resumeEntry?.positionSeconds) { _, _ in
+            Task { await applyResumeWhenReady() }
+        }
+        .onChange(of: resumeEntry?.durationSeconds) { _, _ in
+            Task { await applyResumeWhenReady() }
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { viewWidth = geo.size.width }
+                    .onChange(of: geo.size.width) { _, newWidth in viewWidth = newWidth }
+            }
+        }
+        .onAppear {
+            currentBrightness = activeScreen()?.brightness ?? currentBrightness
         }
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
@@ -356,7 +399,7 @@ struct PlayerView: View {
             currentVolume = initialVolume
         case .brightness:
             showBrightnessHUD = true
-            initialBrightness = UIScreen.main.brightness
+            initialBrightness = activeScreen()?.brightness ?? currentBrightness
             currentBrightness = initialBrightness
         case .none: break
         }
@@ -366,7 +409,7 @@ struct PlayerView: View {
         if showSpeedHUD { return }
         switch type {
         case .seeking:
-            let width = UIScreen.main.bounds.width
+            let width = viewWidth > 0 ? viewWidth : 1
             let duration = progressTracker.timeRange.duration.seconds
             // Scale with video duration: 15% of total per full-screen swipe, clamped 30–300 s
             let seekRange = (duration.isFinite && duration > 0)
@@ -393,7 +436,7 @@ struct PlayerView: View {
             var newBright = initialBrightness + delta
             newBright = max(0, min(1, newBright))
             currentBrightness = newBright
-            UIScreen.main.brightness = newBright
+            activeScreen()?.brightness = newBright
         case .none: break
         }
     }
@@ -412,6 +455,11 @@ struct PlayerView: View {
         }
     }
 
+    private func setTemporarySpeed(_ speed: Float) {
+        currentSpeed = speed
+        player.playbackSpeed = speed
+    }
+
     private func handleLongPressBegan(location: CGPoint, size: CGSize) {
         guard size.width > 0 else { return }
         let sideZone = size.width * 0.28
@@ -419,27 +467,28 @@ struct PlayerView: View {
             speedGestureMode = .none
             return
         }
+        speedPressStartY = location.y
         speedGestureMode = isSpeedLocked ? .unlocking : .locking
         isSpeedingUp = true
         showSpeedHUD = true
         isCommandDeckVisible = false
-        setSpeed(2.0)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        setTemporarySpeed(2.0)
     }
 
     private func handleLongPressChanged(location: CGPoint, size: CGSize) {
-        guard speedGestureMode != .none, size.height > 0 else { return }
-        guard location.y >= size.height * 2 / 3 else { return }
-        let impact = UIImpactFeedbackGenerator(style: .medium)
-        impact.impactOccurred()
+        guard speedGestureMode == .locking || speedGestureMode == .unlocking, size.height > 0 else { return }
+        // 必须有真实下拉动作（≥30pt）才允许触发，防止起手就在下 1/3 区域时瞬间锁定
+        guard location.y - speedPressStartY >= 30, location.y >= size.height * 2 / 3 else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         switch speedGestureMode {
         case .locking:
             isSpeedLocked = true
-            setSpeed(2.0)
+            setTemporarySpeed(2.0)
             speedGestureMode = .locked
         case .unlocking:
-            isSpeedLocked = false
             isSpeedingUp = false
-            setSpeed(1.0)
+            setSpeed(baseSpeed)
             speedGestureMode = .none
             showSpeedHUD = false
         case .none, .locked:
@@ -452,12 +501,12 @@ struct PlayerView: View {
         case .locking:
             if !isSpeedLocked {
                 isSpeedingUp = false
-                setSpeed(1.0)
+                setSpeed(baseSpeed)
             }
             showSpeedHUD = false
         case .unlocking:
             if isSpeedLocked {
-                setSpeed(2.0)
+                setTemporarySpeed(2.0)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     withAnimation { showSpeedHUD = false }
                 }
@@ -525,6 +574,9 @@ struct PlayerView: View {
             player.play()
         }
         resumeEntry = await loadResumeHistory()
+        if resumeEntry == nil {
+            isResumeSettled = true
+        }
         await applyResumeWhenReady()
     }
 
@@ -541,6 +593,7 @@ struct PlayerView: View {
     }
     
     func saveHistory() {
+        guard isResumeSettled else { return }
         guard !client.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             syncMessage = "未绑定 API Key，无法同步历史"
             return
@@ -577,11 +630,25 @@ struct PlayerView: View {
         let playerDuration = progressTracker.timeRange.duration.seconds
         guard playerDuration.isFinite, playerDuration > 0 else { return }
         let position = min(max(entry.positionSeconds, 0), max(entry.durationSeconds - 1, 0))
-        guard position > 5, position < entry.durationSeconds - 5 else { return }
-        let target = CMTime(seconds: position, preferredTimescale: 600)
-        player.seek(to: target)
-        progressTracker.progress = Float(position / playerDuration)
+        guard position > 5, position < entry.durationSeconds - 5 else {
+            didApplyResume = true
+            isResumeSettled = true
+            return
+        }
         didApplyResume = true
+        let target = CMTime(seconds: position, preferredTimescale: 600)
+        // item 未完全就绪时 seek 可能被播放器丢弃，发出后校验实际位置，必要时重试
+        var applied = false
+        for _ in 0..<3 {
+            player.seek(to: target)
+            try? await Task.sleep(for: .milliseconds(500))
+            if abs(progressTracker.time.seconds - position) < 3 {
+                applied = true
+                break
+            }
+        }
+        isResumeSettled = true
+        guard applied else { return }
         resumeMessage = "已从 \(formatTime(position)) 继续播放"
         try? await Task.sleep(for: .seconds(2.2))
         if resumeMessage != nil {
@@ -599,6 +666,7 @@ struct PlayerView: View {
             return nil
         }
     }
+
 
     func togglePlay() {
         if playbackState == .ended || player.canReplay() {
@@ -620,6 +688,10 @@ struct PlayerView: View {
 
     func setSpeed(_ speed: Float) {
         currentSpeed = speed
+        baseSpeed = speed
+        // 显式选择速度即解除手势锁定，避免菜单调速后下次长按进入"解锁"分支
+        isSpeedLocked = false
+        isSpeedingUp = false
         player.playbackSpeed = speed
     }
 
@@ -674,9 +746,9 @@ private struct SeekHUD: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
+        .floatingGlass(in: Capsule())
     }
-    
+
     func formatTime(_ time: CMTime) -> String {
         guard time.seconds.isFinite && time.seconds >= 0 else { return "00:00" }
         let total = Int(time.seconds.rounded())
@@ -709,7 +781,7 @@ private struct ValueHUD: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
+        .floatingGlass(in: Capsule())
     }
 }
 
@@ -785,6 +857,7 @@ private struct PlayerBottomControls: View {
     let formatTime: (CMTime) -> String
     let togglePlay: () -> Void
     let seekToFraction: (CGFloat) -> Void
+    let setSpeed: (Float) -> Void
     
     var body: some View {
         VStack(spacing: 20) {
@@ -807,12 +880,28 @@ private struct PlayerBottomControls: View {
                 
                 Spacer()
                 
-                Text(String(format: "%.2gx", currentSpeed))
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
+                Menu {
+                    ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0], id: \.self) { speed in
+                        Button {
+                            setSpeed(Float(speed))
+                        } label: {
+                            if abs(Double(currentSpeed) - speed) < 0.01 {
+                                Label(String(format: "%.2gx", speed), systemImage: "checkmark")
+                            } else {
+                                Text(String(format: "%.2gx", speed))
+                            }
+                        }
+                    }
+                } label: {
+                    Text(String(format: "%.2gx", currentSpeed))
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(minWidth: 44, minHeight: 36)
+                        .floatingGlass(in: Capsule())
+                        .contentShape(Capsule())
+                }
             }
         }
     }
@@ -850,7 +939,8 @@ private struct PlayerTimeline: View {
                         .offset(x: max(0, min(width - 14, width * currentFraction - 7)))
                 }
                 .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
+                // 命中区垂直外扩到 44pt 标准触控尺寸，视觉高度保持不变；点击（零位移拖动）即跳转
+                .contentShape(Rectangle().inset(by: -10))
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
@@ -995,6 +1085,6 @@ private struct PlayerErrorState: View {
                 .background(.white, in: Capsule())
         }
         .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .floatingGlass(in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 }

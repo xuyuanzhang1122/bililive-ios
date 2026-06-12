@@ -205,7 +205,9 @@ struct HistoryEntry: Identifiable, Codable, Equatable {
             modTime: Int64(parsedUpdatedAt?.timeIntervalSince1970.rounded() ?? 0),
             fileURL: nil,
             thumbnailURL: nil,
-            hlsURL: nil
+            hlsURL: nil,
+            recording: nil,
+            playbackStatus: nil
         )
     }
 

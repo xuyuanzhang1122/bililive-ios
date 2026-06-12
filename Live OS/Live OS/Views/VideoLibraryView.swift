@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VideoLibraryView: View {
     @Environment(AppConfig.self) private var appConfig
+    @Environment(\.scenePhase) private var scenePhase
     @State private var vm: VideoLibraryViewModel?
 
     // 采用更宽的卡片布局，适配不同尺寸屏幕
@@ -37,6 +38,12 @@ struct VideoLibraryView: View {
                 let model = VideoLibraryViewModel(client: appConfig.client)
                 vm = model
                 await model.load()
+                await refreshWhileVisible(model)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await vm?.load() }
+                }
             }
         }
     }
@@ -64,6 +71,14 @@ struct VideoLibraryView: View {
                 .padding(.vertical, 12)
             }
             .refreshable { await vm.load() }
+        }
+    }
+
+    private func refreshWhileVisible(_ model: VideoLibraryViewModel) async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(10))
+            if Task.isCancelled { return }
+            await model.load()
         }
     }
 }
@@ -108,8 +123,7 @@ private struct RoomCard: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Capsule())
+                    .floatingGlass(in: Capsule())
                     .padding(8)
                 }
 
