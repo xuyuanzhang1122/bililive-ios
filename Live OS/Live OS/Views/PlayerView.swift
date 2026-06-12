@@ -200,6 +200,8 @@ struct PlayerView: View {
     @State private var speedGestureMode: SpeedGestureMode = .none
     @State private var resumeEntry: HistoryEntry?
     @State private var didApplyResume = false
+    /// 续播决议（应用成功 / 确认无需续播）前禁止上报历史，避免把服务端旧进度覆盖成片头位置
+    @State private var isResumeSettled = false
     @State private var didStartPlayback = false
     
     let saveHistoryTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
@@ -557,6 +559,9 @@ struct PlayerView: View {
             player.play()
         }
         resumeEntry = await loadResumeHistory()
+        if resumeEntry == nil {
+            isResumeSettled = true
+        }
         await applyResumeWhenReady()
     }
 
@@ -573,6 +578,7 @@ struct PlayerView: View {
     }
     
     func saveHistory() {
+        guard isResumeSettled else { return }
         guard !client.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             syncMessage = "未绑定 API Key，无法同步历史"
             return
@@ -609,11 +615,25 @@ struct PlayerView: View {
         let playerDuration = progressTracker.timeRange.duration.seconds
         guard playerDuration.isFinite, playerDuration > 0 else { return }
         let position = min(max(entry.positionSeconds, 0), max(entry.durationSeconds - 1, 0))
-        guard position > 5, position < entry.durationSeconds - 5 else { return }
-        let target = CMTime(seconds: position, preferredTimescale: 600)
-        player.seek(to: target)
-        progressTracker.progress = Float(position / playerDuration)
+        guard position > 5, position < entry.durationSeconds - 5 else {
+            didApplyResume = true
+            isResumeSettled = true
+            return
+        }
         didApplyResume = true
+        let target = CMTime(seconds: position, preferredTimescale: 600)
+        // item 未完全就绪时 seek 可能被播放器丢弃，发出后校验实际位置，必要时重试
+        var applied = false
+        for _ in 0..<3 {
+            player.seek(to: target)
+            try? await Task.sleep(for: .milliseconds(500))
+            if abs(progressTracker.time.seconds - position) < 3 {
+                applied = true
+                break
+            }
+        }
+        isResumeSettled = true
+        guard applied else { return }
         resumeMessage = "已从 \(formatTime(position)) 继续播放"
         try? await Task.sleep(for: .seconds(2.2))
         if resumeMessage != nil {
