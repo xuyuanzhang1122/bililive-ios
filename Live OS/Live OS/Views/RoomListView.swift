@@ -242,10 +242,15 @@ private struct BackupExportSheet: View {
                     showExporter = true
                 }
                 do {
-                    let record = try await appConfig.client.createRemoteBackup(package)
+                    // 优先上传到备份服务器（源站），主服务器重装后仍可按 ID 找回；
+                    // 未配置备份服务器时回落到主服务器存储
+                    let uploader = appConfig.backupClient ?? appConfig.client
+                    let record = try await uploader.createRemoteBackup(package)
                     await MainActor.run {
                         remoteID = record.id
-                        statusMessage = "本地备份已生成，远端备份已上传"
+                        statusMessage = appConfig.backupClient != nil
+                            ? "本地备份已生成，已上传到备份服务器"
+                            : "本地备份已生成，已上传到主服务器（建议在设置中配置备份服务器）"
                     }
                 } catch {
                     await MainActor.run {

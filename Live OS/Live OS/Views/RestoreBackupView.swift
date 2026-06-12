@@ -91,8 +91,17 @@ struct RestoreBackupView: View {
         errorMessage = nil
         Task {
             do {
-                let package = try await appConfig.client.fetchRemoteBackup(id: id)
-                let result = try await appConfig.client.restoreBackup(id: id)
+                // 配置了备份服务器时从源站取包再恢复到主服务器；
+                // 否则按旧行为让主服务器用本地存储的 ID 恢复
+                let result: BackupRestoreResult
+                let package: BackupPackage
+                if let backupClient = appConfig.backupClient {
+                    package = try await backupClient.fetchRemoteBackup(id: id)
+                    result = try await appConfig.client.restoreBackup(package: package)
+                } else {
+                    package = try await appConfig.client.fetchRemoteBackup(id: id)
+                    result = try await appConfig.client.restoreBackup(id: id)
+                }
                 let finalResult = try await pollRestoreIfNeeded(result)
                 await MainActor.run {
                     applyIOSConfig(from: package)
@@ -130,8 +139,17 @@ struct RestoreBackupView: View {
         var latest = result
         for _ in 0..<20 {
             try await Task.sleep(for: .seconds(2))
-            latest = try await appConfig.client.getRestoreStatus(jobID: jobID)
-            if !["pending", "running", "restarting"].contains(latest.status) { return latest }
+            do {
+                latest = try await appConfig.client.getRestoreStatus(jobID: jobID)
+                if !["pending", "running", "restarting"].contains(latest.status) { return latest }
+            } catch {
+                // 重启后任务表在内存中丢失：服务可达但任务 404 即视为重启完成
+                if case APIError.serverError(let code, _) = error, code == 404 {
+                    return BackupRestoreResult(status: "completed", jobID: jobID, message: "服务已重启完成")
+                }
+                // 重启期间连接失败属于预期，继续轮询
+                continue
+            }
         }
         return latest
     }

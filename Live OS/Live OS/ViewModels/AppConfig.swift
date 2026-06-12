@@ -43,6 +43,14 @@ final class AppConfig {
         }
     }
 
+    /// 备份服务器（源站）地址：远端备份存放在这里，主服务器重装后仍可按 ID 找回
+    var backupServerURL: String {
+        didSet {
+            UserDefaults.standard.set(backupServerURL, forKey: "backupServerURL")
+            _cachedBackupClient = nil
+        }
+    }
+
     /// The currently active URL (auto-switched or manual)
     var activeURL: String {
         if autoSwitchNetwork {
@@ -63,6 +71,9 @@ final class AppConfig {
     private var _cachedClient: APIClient?
 
     @ObservationIgnored
+    private var _cachedBackupClient: APIClient?
+
+    @ObservationIgnored
     private var monitor: NWPathMonitor?
 
     @ObservationIgnored
@@ -81,11 +92,24 @@ final class AppConfig {
         return fresh
     }
 
+    /// 指向备份服务器的客户端；未配置时为 nil（此时备份回落到主服务器存储）
+    var backupClient: APIClient? {
+        let url = backupServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty else { return nil }
+        if let existing = _cachedBackupClient, existing.baseURL == url {
+            return existing
+        }
+        let fresh = APIClient(baseURL: url, apiKey: "")
+        _cachedBackupClient = fresh
+        return fresh
+    }
+
     init() {
         serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? ""
         lanURL = UserDefaults.standard.string(forKey: "lanURL") ?? ""
         publicURL = UserDefaults.standard.string(forKey: "publicURL") ?? ""
         autoSwitchNetwork = UserDefaults.standard.bool(forKey: "autoSwitchNetwork")
+        backupServerURL = UserDefaults.standard.string(forKey: "backupServerURL") ?? ""
         // 优先读 Keychain，缺失则从 UserDefaults 迁移
         apiKey = APIKeychain.load() ?? UserDefaults.standard.string(forKey: "apiKey") ?? ""
         if !apiKey.isEmpty && UserDefaults.standard.string(forKey: "apiKey") != nil {

@@ -18,6 +18,9 @@ struct SettingsView: View {
                 // MARK: 服务器
                 serverSection
 
+                // MARK: 备份服务器
+                backupServerSection
+
                 // MARK: 认证
                 authSection
 
@@ -44,6 +47,20 @@ struct SettingsView: View {
     }
 
     // MARK: - Sections
+
+    private var backupServerSection: some View {
+        @Bindable var config = appConfig
+        return Section {
+            TextField("https://update.example.com", text: $config.backupServerURL)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+        } header: {
+            Text("备份服务器（源站）")
+        } footer: {
+            Text("配置后，远端备份会上传到该服务器，主服务器重装后仍可凭 ID 找回；留空则备份存储在主服务器上。")
+        }
+    }
 
     private var serverSection: some View {
         Section {
