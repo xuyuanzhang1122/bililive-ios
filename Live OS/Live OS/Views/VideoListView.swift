@@ -113,7 +113,17 @@ private struct FileRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(file.name).font(.subheadline).lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(file.name).font(.subheadline).lineLimit(2)
+                    if file.recording == true || file.playbackStatus == "recording" {
+                        Text("录制中")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red, in: Capsule())
+                    }
+                }
                 HStack {
                     Text(file.sizeFormatted).font(.caption).foregroundStyle(.secondary)
                     Spacer()

@@ -42,6 +42,10 @@ struct VideoFileInfo: Identifiable, Codable {
     let fileURL: String?
     let thumbnailURL: String?
     let hlsURL: String?
+    /// 该文件是否仍在录制写入中
+    let recording: Bool?
+    /// 后端播放状态：ready / recording / processing / unsupported
+    let playbackStatus: String?
 
     var id: String { relPath }
 
@@ -59,11 +63,12 @@ struct VideoFileInfo: Identifiable, Codable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, size
+        case name, size, recording
         case relPath = "rel_path"
         case modTime = "mod_time"
         case fileURL = "file_url"
         case thumbnailURL = "thumbnail_url"
         case hlsURL = "hls_url"
+        case playbackStatus = "playback_status"
     }
 }

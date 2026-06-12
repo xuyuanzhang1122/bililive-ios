@@ -231,8 +231,19 @@ struct PlayerView: View {
             _errorMessage = State(initialValue: nil)
         } else {
             _player = StateObject(wrappedValue: Player())
-            _errorMessage = State(initialValue: "正在录制，请稍后")
+            _errorMessage = State(initialValue: Self.failureMessage(for: file))
         }
+    }
+
+    /// 播放失败提示按文件状态区分：录制中 / 处理中 / 其他
+    static func failureMessage(for file: VideoFileInfo) -> String {
+        if file.recording == true || file.playbackStatus == "recording" {
+            return "正在录制，请稍后"
+        }
+        if file.playbackStatus == "processing" {
+            return "正在处理，请稍后"
+        }
+        return "视频暂时无法播放"
     }
 
     var body: some View {
@@ -336,7 +347,7 @@ struct PlayerView: View {
         .onReceive(player: player, assign: \.isBusy, to: $isBusy)
         .onReceive(player: player, assign: \.buffer, to: $buffer)
         .onReceive(player.$error.compactMap { $0?.localizedDescription }) { _ in
-            errorMessage = "正在录制，请稍后"
+            errorMessage = Self.failureMessage(for: file)
         }
         .onReceive(saveHistoryTimer) { _ in
             if isPlaying { saveHistory() }
