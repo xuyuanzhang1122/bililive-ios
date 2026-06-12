@@ -196,6 +196,7 @@ struct PlayerView: View {
     
     @State private var isSpeedingUp = false
     @State private var isSpeedLocked = false
+    @State private var speedPressStartY: CGFloat = 0
     @State private var showSpeedHUD = false
     @State private var speedGestureMode: SpeedGestureMode = .none
     @State private var resumeEntry: HistoryEntry?
@@ -323,6 +324,8 @@ struct PlayerView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 0)
                 .padding(.bottom, 8)
+                // opacity(0) 的视图仍会参与命中测试，隐藏时必须显式关掉，否则吞掉手势层的点击
+                .allowsHitTesting(isCommandDeckVisible)
             } else if let errorMessage {
                 PlayerErrorState(message: errorMessage, dismiss: closePlayer)
                     .padding(24)
@@ -453,25 +456,26 @@ struct PlayerView: View {
             speedGestureMode = .none
             return
         }
+        speedPressStartY = location.y
         speedGestureMode = isSpeedLocked ? .unlocking : .locking
         isSpeedingUp = true
         showSpeedHUD = true
         isCommandDeckVisible = false
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         setTemporarySpeed(2.0)
     }
 
     private func handleLongPressChanged(location: CGPoint, size: CGSize) {
-        guard speedGestureMode != .none, size.height > 0 else { return }
-        guard location.y >= size.height * 2 / 3 else { return }
-        let impact = UIImpactFeedbackGenerator(style: .medium)
-        impact.impactOccurred()
+        guard speedGestureMode == .locking || speedGestureMode == .unlocking, size.height > 0 else { return }
+        // 必须有真实下拉动作（≥30pt）才允许触发，防止起手就在下 1/3 区域时瞬间锁定
+        guard location.y - speedPressStartY >= 30, location.y >= size.height * 2 / 3 else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         switch speedGestureMode {
         case .locking:
             isSpeedLocked = true
             setTemporarySpeed(2.0)
             speedGestureMode = .locked
         case .unlocking:
-            isSpeedLocked = false
             isSpeedingUp = false
             setSpeed(baseSpeed)
             speedGestureMode = .none
@@ -674,6 +678,9 @@ struct PlayerView: View {
     func setSpeed(_ speed: Float) {
         currentSpeed = speed
         baseSpeed = speed
+        // 显式选择速度即解除手势锁定，避免菜单调速后下次长按进入"解锁"分支
+        isSpeedLocked = false
+        isSpeedingUp = false
         player.playbackSpeed = speed
     }
 
@@ -863,11 +870,15 @@ private struct PlayerBottomControls: View {
                 Spacer()
                 
                 Menu {
-                    ForEach([0.5, 1.0, 1.25, 1.5, 2.0], id: \.self) { speed in
+                    ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0], id: \.self) { speed in
                         Button {
                             setSpeed(Float(speed))
                         } label: {
-                            Text(String(format: "%.2gx", speed))
+                            if abs(Double(currentSpeed) - speed) < 0.01 {
+                                Label(String(format: "%.2gx", speed), systemImage: "checkmark")
+                            } else {
+                                Text(String(format: "%.2gx", speed))
+                            }
                         }
                     }
                 } label: {
@@ -875,8 +886,10 @@ private struct PlayerBottomControls: View {
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
+                        .frame(minWidth: 44, minHeight: 36)
                         .floatingGlass(in: Capsule())
+                        .contentShape(Capsule())
                 }
             }
         }
