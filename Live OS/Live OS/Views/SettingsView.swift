@@ -61,16 +61,16 @@ struct SettingsView: View {
                 }
             }
 
-            NavigationLink(destination: BackupRestoreView()) {
+            NavigationLink(destination: RestoreBackupView()) {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("备份与恢复")
-                        Text("导出服务器配置和直播间，支持按 ID 找回")
+                        Text("恢复备份")
+                        Text("通过 ID 或本地文件找回配置")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 } icon: {
-                    Image(systemName: "archivebox.fill")
+                    Image(systemName: "arrow.down.doc.fill")
                         .foregroundStyle(.teal)
                 }
             }
