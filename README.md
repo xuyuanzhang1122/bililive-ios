@@ -14,6 +14,8 @@
 
 [功能](#-能做什么) · [截图](#-应用截图) · [安装](#-怎么装) · [配合服务端](#%EF%B8%8F-配合服务端使用)
 
+🌐 **官方源站（可选）**：[image.xumy.art](https://image.xumy.art) —— 服务端一键安装、配置云备份与找回
+
 <br>
 
 <img src="https://github.com/user-attachments/assets/875ad881-1dbb-44fa-a0d5-3a4d1c0ebbb9" width="85%" alt="首页预览" />
@@ -103,7 +105,7 @@ git clone https://github.com/xuyuanzhang1122/bililive-ios.git
 | **2** | 服务端 Web 设置页开启 **API Key** |
 | **3** | App【设置 → 网络配置】填局域网 IP + 公网域名，开智能切换 |
 | **4** | App【设置 → API Key】粘贴服务端生成的 Key |
-| **5** | （可选）App【设置 → 备份服务器】填源站地址，启用云备份找回 |
+| **5** | （可选）App【设置 → 备份服务器】填源站地址（如官方源站 `https://image.xumy.art`），启用云备份找回 |
 
 连上之后，观看历史和续播进度会自动同步到这个 Key 对应的云端空间。
 
