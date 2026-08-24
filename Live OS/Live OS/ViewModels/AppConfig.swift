@@ -141,13 +141,17 @@ final class AppConfig {
         monitor = NWPathMonitor()
         monitor?.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
-            // When network changes, re-check LAN connectivity
-            self.checkLANConnectivity()
+            switch path.status {
+            case .satisfied where path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet):
+                // WiFi/有线才可能直连局域网服务器，重新探测确认
+                self.checkLANConnectivity()
+            default:
+                // 蜂窝或无网络时局域网地址必然不可达，直接判定公网，省去探测等待
+                self.setNotOnLAN()
+            }
         }
         monitor?.start(queue: monitorQueue)
-
-        // Initial check
-        checkLANConnectivity()
+        // NWPathMonitor 启动后会立刻回调一次当前网络状态，无需额外做初始探测
     }
 
     private func stopNetworkMonitor() {
@@ -175,25 +179,37 @@ final class AppConfig {
             }
 
             if !Task.isCancelled {
-                await MainActor.run {
-                    let changed = self.isOnLAN != finalResult
-                    self.isOnLAN = finalResult
-                    if changed {
-                        // 网络环境变化，清除 APIClient 缓存以强制使用新 URL
-                        self._cachedClient = nil
-                    }
-                }
+                applyLANResult(finalResult)
             }
         }
     }
 
-    /// Try a quick HTTP HEAD to see if the server at the given URL is reachable
+    /// 蜂窝/无网络时直接判定不在局域网，同时取消仍在进行中的探测
+    private func setNotOnLAN() {
+        lanCheckTask?.cancel()
+        lanCheckTask = nil
+        applyLANResult(false)
+    }
+
+    private func applyLANResult(_ value: Bool) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let changed = self.isOnLAN != value
+            self.isOnLAN = value
+            if changed {
+                // 网络环境变化，清除 APIClient 缓存以强制使用新 URL
+                self._cachedClient = nil
+            }
+        }
+    }
+
+    /// Try a quick HTTP GET to see if the server at the given URL is reachable
     private func pingServer(_ urlString: String) async -> Bool {
         let trimmed = urlString.trimmingCharacters(in: .init(charactersIn: "/"))
         guard let url = URL(string: trimmed + "/api/info") else { return false }
 
         var req = URLRequest(url: url)
-        req.httpMethod = "HEAD"
+        req.httpMethod = "GET"
         req.timeoutInterval = 2
 
         if !apiKey.isEmpty {
@@ -202,8 +218,10 @@ final class AppConfig {
 
         do {
             let (_, response) = try await URLSession.shared.data(for: req)
+            // 收到任何 HTTP 状态码（含 401/404/405）都说明服务器可达；
+            // 只有请求本身抛错（超时、无路由、被系统拒绝）才视为不可达
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            return (200..<400).contains(status)
+            return status > 0
         } catch {
             return false
         }
