@@ -28,6 +28,12 @@ struct VideoListView: View {
         .fullScreenCover(item: $selectedFile) { file in
             PlayerView(file: file, client: appConfig.client)
         }
+        .onChange(of: selectedFile?.relPath) { _, newValue in
+            // 播放页关闭后刷新列表，更新“已看 x%”徽章与进度条
+            if newValue == nil, let vm {
+                Task { await vm.load() }
+            }
+        }
         .alert("删除失败", isPresented: .constant(deleteError != nil), presenting: deleteError) { _ in
             Button("好") { deleteError = nil }
         } message: { Text($0) }

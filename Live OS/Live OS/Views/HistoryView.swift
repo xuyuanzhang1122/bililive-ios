@@ -24,6 +24,12 @@ struct HistoryView: View {
                 vm = model
                 await model.load()
             }
+            .onChange(of: selectedFile?.relPath) { _, newValue in
+                // 播放页关闭后刷新列表，同步服务端最新的观看进度
+                if newValue == nil, let vm {
+                    Task { await vm.load() }
+                }
+            }
         }
     }
 

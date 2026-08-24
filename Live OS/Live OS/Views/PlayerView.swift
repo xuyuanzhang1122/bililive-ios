@@ -592,10 +592,12 @@ struct PlayerView: View {
         dismiss()
     }
     
-    func saveHistory() {
+    /// 上报观看历史到服务端；showsToast 为 true 时才显示同步结果提示（暂停等用户可感知时机）。
+    /// 周期性静默上报（15 秒定时器 / 拖动进度条 / 关闭页面）不弹提示，上报失败一律静默忽略。
+    func saveHistory(showsToast: Bool = false) {
         guard isResumeSettled else { return }
         guard !client.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            syncMessage = "未绑定 API Key，无法同步历史"
+            if showsToast { syncMessage = "未绑定 API Key，无法同步历史" }
             return
         }
         let position = progressTracker.time.seconds
@@ -609,6 +611,7 @@ struct PlayerView: View {
                     positionSeconds: position,
                     durationSeconds: duration
                 )
+                guard showsToast else { return }
                 await MainActor.run {
                     syncMessage = "已同步到服务端"
                 }
@@ -617,20 +620,25 @@ struct PlayerView: View {
                     if syncMessage == "已同步到服务端" { syncMessage = nil }
                 }
             } catch {
-                await MainActor.run {
-                    syncMessage = "同步失败"
-                }
+                // 上报失败静默忽略，不打断播放体验
             }
         }
     }
 
     @MainActor
     func applyResumeWhenReady() async {
-        guard !didApplyResume, let entry = resumeEntry, entry.durationSeconds > 0 else { return }
+        guard !didApplyResume, let entry = resumeEntry else { return }
+        // 历史时长非法时无法据此续播：直接落定，避免 isResumeSettled 永远为 false 而阻塞进度上报
+        guard entry.durationSeconds > 0 else {
+            didApplyResume = true
+            isResumeSettled = true
+            return
+        }
         let playerDuration = progressTracker.timeRange.duration.seconds
         guard playerDuration.isFinite, playerDuration > 0 else { return }
         let position = min(max(entry.positionSeconds, 0), max(entry.durationSeconds - 1, 0))
-        guard position > 5, position < entry.durationSeconds - 5 else {
+        // 续播条件：跳过片头（≤5 秒视为没看过），且进度未达 95%（临近结尾视为已看完，从头播放）
+        guard position > 5, position < entry.durationSeconds * 0.95 else {
             didApplyResume = true
             isResumeSettled = true
             return
@@ -672,7 +680,7 @@ struct PlayerView: View {
         if playbackState == .ended || player.canReplay() {
             player.replay()
         } else {
-            if playbackState == .playing { saveHistory() }
+            if playbackState == .playing { saveHistory(showsToast: true) }
             player.togglePlayPause()
         }
     }
