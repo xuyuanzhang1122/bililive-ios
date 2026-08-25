@@ -583,7 +583,7 @@ struct PlayerView: View {
                 while true {
                     try Task.checkCancellation()
                     result = try await client.resolvePlayback(file.relPath)
-                    if result.status == "ready", let rawURL = result.url, let url = URL(string: rawURL) {
+                    if result.status == "ready", let rawURL = result.url, let url = client.absoluteURL(rawURL) {
                         resolvedPlaybackURL = url
                         errorMessage = nil
                         return
