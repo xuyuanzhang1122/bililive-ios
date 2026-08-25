@@ -127,6 +127,11 @@ final class APIClient {
         return result.url
     }
 
+    func resolvePlayback(_ relPath: String) async throws -> PlaybackResolveResult {
+        let encoded = encodedRelPath(relPath)
+        return try await fetchWrapped(PlaybackResolveResult.self, path: "/api/playback/resolve/\(encoded)")
+    }
+
     // MARK: - Video library
 
     func getVideoLibrary() async throws -> [VideoRoomInfo] {

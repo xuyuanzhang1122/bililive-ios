@@ -177,6 +177,9 @@ struct PlayerView: View {
     @State private var isCommandDeckVisible = true
     @State private var errorMessage: String?
     @State private var resumeMessage: String?
+    @State private var resolvedPlaybackURL: URL?
+    @State private var resolvingPlayback = true
+    @State private var playbackResolveTask: Task<Void, Never>?
     @State private var syncMessage: String?
     
     // Gestures States
@@ -211,6 +214,10 @@ struct PlayerView: View {
         client.thumbnailURL(for: file)
     }
 
+    private var canRenderPlayer: Bool {
+        errorMessage == nil && resolvedPlaybackURL != nil
+    }
+
     private var isPlaying: Bool {
         playbackState == .playing
     }
@@ -224,15 +231,10 @@ struct PlayerView: View {
             forwardSkipInterval: 15
         )
 
-        if let url = client.playbackURL(for: file) {
-            let p = Player(item: .simple(url: url), configuration: configuration)
-            p.actionAtItemEnd = .pause
-            _player = StateObject(wrappedValue: p)
-            _errorMessage = State(initialValue: nil)
-        } else {
-            _player = StateObject(wrappedValue: Player())
-            _errorMessage = State(initialValue: Self.failureMessage(for: file))
-        }
+        let p = Player(items: [], configuration: configuration)
+        p.actionAtItemEnd = .pause
+        _player = StateObject(wrappedValue: p)
+        _errorMessage = State(initialValue: nil)
     }
 
     /// 播放失败提示按文件状态区分：录制中 / 处理中 / 其他
@@ -253,7 +255,7 @@ struct PlayerView: View {
             SystemVolumeView()
                 .frame(width: 0, height: 0)
 
-            if errorMessage == nil {
+            if canRenderPlayer {
                 VideoView(player: player)
                     .gravity(.resizeAspect)
                     .supportsPictureInPicture()
@@ -374,7 +376,19 @@ struct PlayerView: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
         .task(preparePlayer)
+        .task(resolvePlayback)
+        .onChange(of: resolvedPlaybackURL) { _, newURL in
+            guard let newURL else { return }
+            player.currentItem = .simple(url: newURL)
+            player.actionAtItemEnd = .pause
+            if !didStartPlayback {
+                didStartPlayback = true
+                player.becomeActive()
+                player.play()
+            }
+        }
         .onDisappear {
+            playbackResolveTask?.cancel()
             saveHistory()
             stopPlayer()
         }
@@ -558,9 +572,48 @@ struct PlayerView: View {
         .allowsHitTesting(false)
     }
 
+    @MainActor
+    private func resolvePlayback() async {
+        playbackResolveTask?.cancel()
+        playbackResolveTask = Task { @MainActor in
+            resolvingPlayback = true
+            defer { resolvingPlayback = false }
+            do {
+                var result: PlaybackResolveResult
+                while true {
+                    try Task.checkCancellation()
+                    result = try await client.resolvePlayback(file.relPath)
+                    if result.status == "ready", let rawURL = result.url, let url = URL(string: rawURL) {
+                        resolvedPlaybackURL = url
+                        errorMessage = nil
+                        return
+                    }
+                    if result.status == "recording" || result.status == "failed" {
+                        errorMessage = result.error ?? Self.failureMessage(for: file)
+                        resolvedPlaybackURL = nil
+                        return
+                    }
+                    let seconds = max(1, result.retryAfterSeconds ?? 2)
+                    try await Task.sleep(for: .seconds(seconds))
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // 兼容旧服务端：解析接口不可用时回退到列表接口返回的播放地址。
+                if let fallback = client.playbackURL(for: file) {
+                    resolvedPlaybackURL = fallback
+                    errorMessage = nil
+                } else {
+                    resolvedPlaybackURL = nil
+                    errorMessage = Self.failureMessage(for: file)
+                }
+            }
+        }
+        await playbackResolveTask?.value
+    }
+
     // MARK: - Actions
     func preparePlayer() async {
-        guard errorMessage == nil else { return }
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
             try AVAudioSession.sharedInstance().setActive(true)
@@ -569,10 +622,6 @@ struct PlayerView: View {
             return
         }
         player.becomeActive()
-        if !didStartPlayback {
-            didStartPlayback = true
-            player.play()
-        }
         resumeEntry = await loadResumeHistory()
         if resumeEntry == nil {
             isResumeSettled = true

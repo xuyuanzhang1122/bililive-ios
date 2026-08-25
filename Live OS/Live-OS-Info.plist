@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>Live OS RC Preview</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>用于检测并直连你局域网内的录播服务器，在内网环境下观看更快、更省流量。</string>
 	<key>UIBackgroundModes</key>

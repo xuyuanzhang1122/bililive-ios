@@ -29,6 +29,26 @@ struct ResolveURLResult: Decodable {
     let url: String
 }
 
+struct PlaybackResolveResult: Decodable {
+    let status: String
+    let protocolName: String?
+    let mimeType: String?
+    let url: String?
+    let expiresAt: Int64?
+    let error: String?
+    let retryAfterSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case protocolName = "protocol"
+        case mimeType = "mime_type"
+        case url
+        case expiresAt = "expires_at"
+        case error
+        case retryAfterSeconds = "retry_after_seconds"
+    }
+}
+
 struct APIKeyUser: Decodable, Equatable {
     let id: String
     let name: String
