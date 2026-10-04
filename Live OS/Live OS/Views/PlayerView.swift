@@ -254,7 +254,7 @@ struct PlayerView: View {
         return "视频暂时无法播放"
     }
 
-    var body: some View {
+    private var playerContent: some View {
         ZStack {
             PlayerBackdrop(thumbnailURL: thumbnailURL, isPlaying: isPlaying)
             
@@ -350,6 +350,10 @@ struct PlayerView: View {
                     .padding(24)
             }
         }
+    }
+
+    var body: some View {
+        playerContent
         .bind(progressTracker, to: player)
         .onReceive(player: player, assign: \.playbackState, to: $playbackState)
         .onReceive(player: player, assign: \.isBusy, to: $isBusy)
@@ -393,20 +397,22 @@ struct PlayerView: View {
                 player.play()
             }
         }
-        .onDisappear {
-            playbackActive = false
-            playbackGeneration += 1
-            playbackResolveTask?.cancel()
-            if let model = sessionModel { Task { await model.close() } }
-            saveHistory()
-            authorizationController?.close()
-            stopPlayer()
-        }
+        .onDisappear(perform: handlePlayerDisappearance)
         .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isCommandDeckVisible)
         .animation(.spring(response: 0.3, dampingFraction: 0.78), value: playbackState)
         .sensoryFeedback(.impact(weight: .light), trigger: playbackState)
     }
     
+    private func handlePlayerDisappearance() {
+        playbackActive = false
+        playbackGeneration += 1
+        playbackResolveTask?.cancel()
+        if let model = sessionModel { Task { await model.close() } }
+        saveHistory()
+        authorizationController?.close()
+        stopPlayer()
+    }
+
     // MARK: - Gesture Methods
     private func handlePanBegan(_ type: GestureType) {
         if showSpeedHUD { return }
