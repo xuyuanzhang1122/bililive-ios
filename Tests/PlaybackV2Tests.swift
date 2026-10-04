@@ -89,6 +89,10 @@ final class V2FixtureProtocol: URLProtocol {
         let other = VideoListViewModel(client:APIClient(baseURL:"https://other",apiKey:"secret",playbackAPIMode:.legacy),room:room)
         await other.load()
         check(other.files.isEmpty,"另一服务器不读取旧文件列表缓存")
+        var history = APIClient.SaveHistoryRequest(videoPath:"clip",videoName:"clip",positionSeconds:30,durationSeconds:100)
+        history.recordingId = "original-id";history.sourceVersion = "original-version"
+        let historyJSON = try JSONSerialization.jsonObject(with:JSONEncoder().encode(history)) as! [String:Any]
+        check(historyJSON["recording_id"] as? String == "original-id" && historyJSON["source_version"] as? String == "original-version","历史提交保留预期录播身份")
         failures += try await runSessionLifecycleTests()
         failures += runNativeCapabilitiesTests()
         failures += try await runPlaybackRefreshTests()

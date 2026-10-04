@@ -181,6 +181,8 @@ struct PlayerView: View {
     @State private var resolvingPlayback = true
     @State private var playbackResolveTask: Task<Void, Never>?
     @State private var sessionModel: PlaybackSessionModel?
+    @State private var historyIdentity: RecordingIdentity?
+    @State private var historyClient: APIClient?
     @State private var authorizationController: PlaybackRefreshCoordinator?
     @State private var playbackGeneration = 0
     @State private var playbackActive = true
@@ -592,6 +594,7 @@ struct PlayerView: View {
         resolvedPlaybackURL = nil
         errorMessage = nil
         let boundClient = APIClient(baseURL:client.baseURL,apiKey:client.apiKey,playbackAPIMode:client.playbackAPIMode)
+        historyClient = boundClient; historyIdentity = file.recordingIdentity
         playbackResolveTask = Task { @MainActor in
             resolvingPlayback = true
             defer { resolvingPlayback = false }
@@ -607,6 +610,7 @@ struct PlayerView: View {
                     if boundClient.playbackAPIMode != .legacy {
                         guard playbackActive, token == playbackGeneration else { return }
                         guard let identity = target.recordingIdentity else { throw APIError.serverError(-1,"录播身份已变化，请刷新列表") }
+                        historyIdentity = identity
                         let model = PlaybackSessionModel(client:boundClient)
                         let controller = PlaybackRefreshCoordinator(controller:PillarboxSessionController(player:player))
                         sessionModel = model; authorizationController = controller
@@ -699,7 +703,9 @@ struct PlayerView: View {
     /// 周期性静默上报（15 秒定时器 / 拖动进度条 / 关闭页面）不弹提示，上报失败一律静默忽略。
     func saveHistory(showsToast: Bool = false) {
         guard isResumeSettled else { return }
-        guard !client.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let boundHistoryClient = historyClient ?? client
+        let boundIdentity = historyIdentity
+        guard !boundHistoryClient.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             if showsToast { syncMessage = "未绑定 API Key，无法同步历史" }
             return
         }
@@ -708,11 +714,12 @@ struct PlayerView: View {
         guard position.isFinite, duration.isFinite, duration > 0 else { return }
         Task {
             do {
-                try await client.saveWatchHistory(
+                try await boundHistoryClient.saveWatchHistory(
                     videoPath: file.relPath,
                     videoName: file.name,
                     positionSeconds: position,
-                    durationSeconds: duration
+                    durationSeconds: duration,
+                    recordingId: boundIdentity?.recordingId, sourceVersion: boundIdentity?.sourceVersion
                 )
                 guard showsToast else { return }
                 await MainActor.run {

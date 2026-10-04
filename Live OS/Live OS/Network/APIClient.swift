@@ -322,12 +322,16 @@ final class APIClient {
     // MARK: - Watch history
 
     struct SaveHistoryRequest: Codable {
+        var recordingId: String?
+        var sourceVersion: String?
         let videoPath: String
         let videoName: String
         let positionSeconds: Double
         let durationSeconds: Double
 
         enum CodingKeys: String, CodingKey {
+            case recordingId = "recording_id"
+            case sourceVersion = "source_version"
             case videoPath = "video_path"
             case videoName = "video_name"
             case positionSeconds = "position_seconds"
@@ -335,8 +339,9 @@ final class APIClient {
         }
     }
 
-    func saveWatchHistory(videoPath: String, videoName: String, positionSeconds: Double, durationSeconds: Double) async throws {
-        let req = SaveHistoryRequest(videoPath: videoPath, videoName: videoName, positionSeconds: positionSeconds, durationSeconds: durationSeconds)
+    func saveWatchHistory(videoPath: String, videoName: String, positionSeconds: Double, durationSeconds: Double, recordingId: String? = nil, sourceVersion: String? = nil) async throws {
+        var req = SaveHistoryRequest(videoPath: videoPath, videoName: videoName, positionSeconds: positionSeconds, durationSeconds: durationSeconds)
+        req.recordingId = recordingId; req.sourceVersion = sourceVersion
         let body = try JSONEncoder().encode(req)
         _ = try await fetch(APIResponse<EmptyData>.self, path: "/api/history", method: "POST", body: body)
     }
