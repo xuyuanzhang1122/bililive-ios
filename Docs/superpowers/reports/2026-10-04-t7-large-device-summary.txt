@@ -1,0 +1,22 @@
+Launched application with bililiveos.LiveOS.T7Verification bundle identifier.
+Waiting for the application to terminate…
+T7_DEVICE 1791114320.601124 CAPABILITIES {"protocols":["file","hls"],"audio":[{"maxChannels":2,"profiles":["lc"],"maxSampleRate":48000,"codec":"aac"}],"video":[{"codec":"h264","maxWidth":1920,"maxBitDepth":8,"maxLevel":42,"maxHeight":1080,"hdr":false,"maxFps":60,"profiles":["baseline","main","high"]},{"codec":"h264","maxWidth":1080,"maxBitDepth":8,"maxLevel":42,"maxHeight":1920,"hdr":false,"maxFps":60,"profiles":["baseline","main","high"]}],"containers":["mp4","hls"]}
+2026-10-04 19:45:20.611 Live OS[5491:8951296] Successfully load keyboard extensions
+T7_DEVICE 1791114320.624681 RESOLVER_START phase=cold
+T7_DEVICE 1791114321.37707 FIRST_FRAME phase=cold latency=0.7374529838562012 position=0.0
+T7_DEVICE 1791114321.3770828 READY phase=cold totalLatency=0.7524099349975586 decision=remux asset=8523bf2cbed1237e6def17045baba935b76706ebe866657bf6950beee069cf08-sdr-h264-main-1080p30-aac-stereo-v1
+T7_DEVICE 1791114323.6021252 TARGET_SEEK phase=cold fraction=0.5 position=2514.450893429 playing=true
+T7_DEVICE 1791114326.118741 TARGET_SEEK phase=cold fraction=0.95 position=4776.46451574 playing=true
+T7_DEVICE 1791114326.330854 SEEK phase=cold position=210.0 rate=1.5 playing=false
+T7_DEVICE 1791114326.3817248 CANCEL phase=cold status=cancelled
+T7_DEVICE 1791114326.3817592 RESOLVER_START phase=warm
+T7_DEVICE 1791114327.1368442 FIRST_FRAME phase=warm latency=0.7418290376663208 position=0.0
+T7_DEVICE 1791114327.136862 READY phase=warm totalLatency=0.7551009654998779 decision=remux asset=8523bf2cbed1237e6def17045baba935b76706ebe866657bf6950beee069cf08-sdr-h264-main-1080p30-aac-stereo-v1
+T7_DEVICE 1791114329.552927 TARGET_SEEK phase=warm fraction=0.5 position=2514.809953711 playing=true
+T7_DEVICE 1791114331.888221 TARGET_SEEK phase=warm fraction=0.95 position=4776.386237222 playing=true
+T7_DEVICE 1791114332.101503 SEEK phase=warm position=210.0 rate=1.5 playing=false
+T7_DEVICE 1791114573.193788 REFRESH_STATE phase=warm position=210.0 rate=1.5 playing=false
+T7_DEVICE 1791114573.193919 REFRESH phase=warm position=210.0 rate=1.5 paused=true tokenExpiry=1791114872
+T7_DEVICE 1791114629.4860501 PAST_OLD_TOKEN position=293.676555478 playing=true
+T7_DEVICE 1791114629.543693 CANCEL phase=warm status=cancelled
+T7_DEVICE 1791114629.543768 PASS sourceBytes=5634539067 actualAVPlayerLayer=true targetLargeRecording=true
