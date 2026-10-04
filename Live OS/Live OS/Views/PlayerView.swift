@@ -619,6 +619,7 @@ struct PlayerView: View {
                             try await controller.apply(url:url)
                             guard playbackActive, token == playbackGeneration else { return }
                             resolvedPlaybackURL = url; errorMessage = nil
+                            await applyResumeWhenReady()
                         }
                         model.onError = { error in
                             guard playbackActive, token == playbackGeneration else { return }
@@ -738,6 +739,10 @@ struct PlayerView: View {
     @MainActor
     func applyResumeWhenReady() async {
         guard !didApplyResume, let entry = resumeEntry else { return }
+        if historyClient?.playbackAPIMode != .legacy {
+            guard let identity = historyIdentity else { return }
+            guard entry.matches(identity:identity) else { didApplyResume = true; isResumeSettled = true; return }
+        }
         // 历史时长非法时无法据此续播：直接落定，避免 isResumeSettled 永远为 false 而阻塞进度上报
         guard entry.durationSeconds > 0 else {
             didApplyResume = true
@@ -775,14 +780,12 @@ struct PlayerView: View {
     }
 
     func loadResumeHistory() async -> HistoryEntry? {
-        do {
-            return try await client.getWatchHistoryEntry(videoPath: file.relPath)
-        } catch {
-            if let entries = try? await client.getWatchHistory() {
-                return entries.first { $0.videoPath == file.relPath }
-            }
-            return nil
-        }
+        let bound = historyClient ?? client
+        var entry: HistoryEntry?
+        do { entry = try await bound.getWatchHistoryEntry(videoPath: file.relPath) }
+        catch { entry = (try? await bound.getWatchHistory())?.first { $0.videoPath == file.relPath } }
+        guard bound.baseURL == client.baseURL, bound.apiKey == client.apiKey else { return nil }
+        return entry
     }
 
 

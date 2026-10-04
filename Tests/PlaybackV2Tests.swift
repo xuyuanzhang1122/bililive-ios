@@ -89,6 +89,13 @@ final class V2FixtureProtocol: URLProtocol {
         let other = VideoListViewModel(client:APIClient(baseURL:"https://other",apiKey:"secret",playbackAPIMode:.legacy),room:room)
         await other.load()
         check(other.files.isEmpty,"另一服务器不读取旧文件列表缓存")
+        let oldHistoryJSON = Data("{\"id\":1,\"video_path\":\"clip\",\"video_name\":\"clip\",\"position_seconds\":30,\"duration_seconds\":100,\"updated_at\":\"2026-10-04\"}".utf8)
+        let oldHistory = try JSONDecoder().decode(HistoryEntry.self,from:oldHistoryJSON)
+        check(!oldHistory.matches(identity:RecordingIdentity(recordingId:"id",sourceVersion:"v")),"无身份旧历史不能用于v2续播")
+        var boundJSON = try JSONSerialization.jsonObject(with:oldHistoryJSON) as! [String:Any]
+        boundJSON["recording_id"]="id";boundJSON["source_version"]="v"
+        let boundHistory = try JSONDecoder().decode(HistoryEntry.self,from:JSONSerialization.data(withJSONObject:boundJSON))
+        check(boundHistory.matches(identity:RecordingIdentity(recordingId:"id",sourceVersion:"v")) && !boundHistory.matches(identity:RecordingIdentity(recordingId:"id",sourceVersion:"changed")),"续播绑定来源版本")
         var history = APIClient.SaveHistoryRequest(videoPath:"clip",videoName:"clip",positionSeconds:30,durationSeconds:100)
         history.recordingId = "original-id";history.sourceVersion = "original-version"
         let historyJSON = try JSONSerialization.jsonObject(with:JSONEncoder().encode(history)) as! [String:Any]

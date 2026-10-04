@@ -10,21 +10,29 @@ enum NativePlaybackCapabilities {
         ("main","Z01AKuygPAET8uAiAAADAAIAAAMA8B4wYyw=","aOvjyyA="),
         ("high","Z2QAKqzZQHgCJ+XARAAAAwAEAAADAeA8YMZY","aOvjyyLA")
     ]
+    private static let portraitParameterSets: [(String,String,String)] = [
+        ("baseline","Z0LAKtsBEA8eXwEQAAADABAAAAeA8YMu","aMqDyyA="),
+        ("main","Z01AKuygIgHjy+AiAAADAAIAAAMA8B4wYyw=","aOrjyyA="),
+        ("high","Z2QAKqzZQEQDx5fARAAAAwAEAAADAeA8YMZY","aOrjyyLA")
+    ]
     static func detect(videoProbe: ((String, Data, Data) -> Bool)? = nil, aacProbe: (() -> Bool)? = nil) -> PlaybackCapabilities {
-        let profiles = parameterSets.compactMap { profile,sps,pps -> String? in
-            guard let sps = Data(base64Encoded:sps), let pps = Data(base64Encoded:pps),
-                  (videoProbe?(profile,sps,pps) ?? confirmsH264(sps:sps,pps:pps)) else { return nil }
-            return profile
+        var video: [VideoDecodeCapability] = []
+        for (sets,width,height) in [(parameterSets,1920,1080),(portraitParameterSets,1080,1920)] {
+            let profiles = sets.compactMap { profile,sps,pps -> String? in
+                guard let sps = Data(base64Encoded:sps), let pps = Data(base64Encoded:pps),
+                      (videoProbe?(profile,sps,pps) ?? confirmsH264(sps:sps,pps:pps,width:width,height:height)) else { return nil }
+                return profile
+            }
+            if !profiles.isEmpty { video.append(VideoDecodeCapability(codec:"h264",profiles:profiles,maxLevel:42,
+                maxWidth:width,maxHeight:height,maxFps:60,maxBitDepth:8,hdr:false)) }
         }
-        let video = profiles.isEmpty ? [] : [VideoDecodeCapability(codec:"h264",profiles:profiles,maxLevel:42,
-            maxWidth:1920,maxHeight:1080,maxFps:60,maxBitDepth:8,hdr:false)]
         let audio = (aacProbe?() ?? confirmsAAC()) ? [AudioDecodeCapability(codec:"aac",profiles:["lc"],maxChannels:2,maxSampleRate:48000)] : []
         let mp4 = AVURLAsset.isPlayableExtendedMIMEType("video/mp4")
         let hls = AVURLAsset.isPlayableExtendedMIMEType("application/vnd.apple.mpegurl")
         return PlaybackCapabilities(containers:(mp4 ? ["mp4"] : []) + (hls ? ["hls"] : []),
             protocols:(mp4 ? ["file"] : []) + (hls ? ["hls"] : []),video:video,audio:audio)
     }
-    private static func confirmsH264(sps:Data,pps:Data) -> Bool {
+    private static func confirmsH264(sps:Data,pps:Data,width:Int,height:Int) -> Bool {
         var format: CMFormatDescription?
         let status = sps.withUnsafeBytes { s in pps.withUnsafeBytes { p in
             let pointers = [s.bindMemory(to:UInt8.self).baseAddress!,p.bindMemory(to:UInt8.self).baseAddress!]
@@ -36,7 +44,7 @@ enum NativePlaybackCapabilities {
         } }
         guard status == noErr, let format else { return false }
         let size = CMVideoFormatDescriptionGetDimensions(format)
-        guard size.width == 1920, size.height == 1080 else { return false }
+        guard size.width == width, size.height == height else { return false }
         var decoder: VTDecompressionSession?
         var callback = VTDecompressionOutputCallbackRecord(decompressionOutputCallback: { _,_,_,_,_,_,_ in },decompressionOutputRefCon:nil)
         let created = VTDecompressionSessionCreate(allocator:nil,formatDescription:format,decoderSpecification:nil,

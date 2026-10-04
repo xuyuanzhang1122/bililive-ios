@@ -191,6 +191,9 @@ final class HistoryViewModel {
 // MARK: - Model
 
 struct HistoryEntry: Identifiable, Codable, Equatable {
+    var recordingId: String?
+    var sourceVersion: String?
+    func matches(identity: RecordingIdentity) -> Bool { recordingId == identity.recordingId && sourceVersion == identity.sourceVersion }
     let id: Int64
     let videoPath: String
     let videoName: String
@@ -213,7 +216,8 @@ struct HistoryEntry: Identifiable, Codable, Equatable {
             thumbnailURL: nil,
             hlsURL: nil,
             recording: nil,
-            playbackStatus: nil
+            playbackStatus: nil,
+            recordingId: recordingId, sourceVersion: sourceVersion
         )
     }
 
@@ -234,6 +238,8 @@ struct HistoryEntry: Identifiable, Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id
+        case recordingId = "recording_id"
+        case sourceVersion = "source_version"
         case videoPath = "video_path"
         case videoName = "video_name"
         case positionSeconds = "position_seconds"

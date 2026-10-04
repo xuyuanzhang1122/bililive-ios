@@ -14,6 +14,7 @@ extension APIClient: PlaybackSessionTransport {}
     private let sleep: (Double) async throws -> Void
     private var generation = 0
     private var current: PlaybackSession?
+    private var playedAsset: String?
     private var body: CreatePlaybackSession?
     private var refreshTask: Task<Void, Never>?
 
@@ -26,7 +27,7 @@ extension APIClient: PlaybackSessionTransport {}
         generation += 1
         refreshTask?.cancel(); refreshTask = nil
         let id = current?.id
-        current = nil; body = nil
+        current = nil; body = nil; playedAsset = nil
         return id
     }
     func close() async {
@@ -60,6 +61,11 @@ extension APIClient: PlaybackSessionTransport {}
             try check(value)
             current = value
             if value.status == .ready {
+                if let playedAsset, playedAsset != value.assetVersion {
+                    await cancelQuietly(value.id); current = nil
+                    throw APIError.serverError(-1, "播放资产版本变化，请重新打开")
+                }
+                playedAsset = playedAsset ?? value.assetVersion
                 try await onReady(value)
                 return
             }
@@ -105,9 +111,6 @@ extension APIClient: PlaybackSessionTransport {}
                     await cancelQuietly(value.id)
                     guard active(token) else { return }
                     value = fresh
-                }
-                guard previous.assetVersion.isEmpty || value.assetVersion.isEmpty || previous.assetVersion == value.assetVersion else {
-                    throw APIError.serverError(-1, "播放资产版本变化，请重新打开")
                 }
                 failures = 0; retryDelay = nil
                 try await ready(value, token: token)

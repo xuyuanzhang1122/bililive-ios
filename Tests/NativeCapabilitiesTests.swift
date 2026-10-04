@@ -8,6 +8,7 @@ import Foundation
     if confirmed.video.first?.profiles != ["main"] || confirmed.audio.first?.profiles != ["lc"] {
         failures += 1; print("FAIL: 仅上报实际确认的profile")
     }
+    if !confirmed.video.contains(where:{$0.maxWidth == 1080 && $0.maxHeight == 1920 && $0.profiles == ["main"]}) { failures += 1; print("FAIL: 竖屏实际探测必须独立声明，不放宽横屏范围") }
     let actual = NativePlaybackCapabilities.detect()
     let encoder = JSONEncoder(); encoder.keyEncodingStrategy = .convertToSnakeCase
     if let data = try? encoder.encode(actual), let value = String(data:data,encoding:.utf8) { print("当前主机native能力（不代表手机）: \(value)") }

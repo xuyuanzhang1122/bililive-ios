@@ -76,5 +76,22 @@ import Foundation
     pollingClock.tick();await settle();await pollingTask.value
     check(pollingReady == 0 && pollingErrors == 1,"处理轮询不接受其他会话 ID")
     await pollingModel.close()
+    for transition in ["ready", "processing"] {
+        var alteredRaw = (raw["value"] as! [String:Any])["data"] as! [String:Any]
+        alteredRaw["id"] = "new-session"; alteredRaw["asset_version"] = "changed-asset"
+        let altered = try decoder.decode(PlaybackSession.self,from:JSONSerialization.data(withJSONObject:alteredRaw))
+        let bound = TestSessionTransport(ready), boundClock = TestSessionClock()
+        var creations = 0
+        bound.make = { creations += 1; return creations == 1 ? ready : transition == "ready" ? altered : processing }
+        bound.get = { if creations < 2 { throw V2RequestError(status:410,failure:V2Failure(code:"session_expired",message:"expired",retryable:false),requestId:"r") }; var nextRaw = alteredRaw; nextRaw["id"] = processing.id; return try decoder.decode(PlaybackSession.self,from:JSONSerialization.data(withJSONObject:nextRaw)) }
+        let assetModel = PlaybackSessionModel(client:bound,sleep:boundClock.sleep)
+        var callbacks = 0, failuresSeen = 0
+        assetModel.onReady = { _ in callbacks += 1 }; assetModel.onError = { _ in failuresSeen += 1 }
+        await assetModel.open(identity:identity,capabilities:caps);await settle();boundClock.tick();await settle()
+        if transition == "processing" {boundClock.tick();await settle()}
+        check(callbacks == 1 && failuresSeen == 1,"资产绑定跨410/\(transition)保持")
+        check(bound.cancelled.contains(transition == "ready" ? altered.id : processing.id),"资产变化取消新会话")
+        await assetModel.close();await settle()
+    }
     return failures
 }
