@@ -34,7 +34,7 @@ struct VideoLibraryView: View {
                     }
                 }
             }
-            .task {
+            .task(id: appConfig.activeURL) {
                 let model = VideoLibraryViewModel(client: appConfig.client)
                 vm = model
                 await model.load()
@@ -143,7 +143,7 @@ private struct RoomCard: View {
                     .lineLimit(1)
                 
                 HStack {
-                    Label("\(room.videoCount) 个视频", systemImage: "play.rectangle.on.rectangle")
+                    Label(room.statisticsStatus == "unavailable" ? "统计暂不可用" : "\(room.videoCount) 个视频", systemImage: "play.rectangle.on.rectangle")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                     

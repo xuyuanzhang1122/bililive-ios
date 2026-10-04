@@ -82,9 +82,15 @@ struct VideoListView: View {
                 if editMode == .active {
                     Button("删除(\(vm.selection.count))") {
                         Task {
-                            do { try await vm.deleteSelected() }
-                            catch { deleteError = error.localizedDescription }
-                            editMode = .inactive
+                            do {
+                                let deleted = try await vm.deleteSelected()
+                                if let failure = vm.deleteFailures.first {
+                                    deleteError = "已删除 \(deleted) 个文件，\(vm.deleteFailures.count) 个失败：\(failure.message ?? "删除失败")"
+                                }
+                                editMode = vm.selection.isEmpty ? .inactive : .active
+                            } catch {
+                                deleteError = error.localizedDescription
+                            }
                         }
                     }
                     .disabled(vm.selection.isEmpty)

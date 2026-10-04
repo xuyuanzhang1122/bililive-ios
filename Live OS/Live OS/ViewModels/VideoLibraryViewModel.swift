@@ -9,13 +9,20 @@ final class VideoLibraryViewModel {
 
     private let client: APIClient
 
+    @MainActor private var cacheKey: String {
+        let characters = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/%"))
+        let server = client.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return "VideoLibraryRooms_" + (server.addingPercentEncoding(withAllowedCharacters: characters) ?? "")
+    }
+
     init(client: APIClient) {
         self.client = client
     }
 
     @MainActor
     func load() async {
-        let cacheKey = "VideoLibraryRooms"
+        let cacheKey = self.cacheKey
         // On manual refresh (rooms already loaded), invalidate thumbnails
         if !rooms.isEmpty {
             let urls = rooms.compactMap { room -> URL? in
@@ -39,9 +46,7 @@ final class VideoLibraryViewModel {
             self.rooms = newRooms
             CacheManager.shared.save(newRooms, forKey: cacheKey)
         } catch {
-            if rooms.isEmpty {
-                errorMessage = error.localizedDescription
-            }
+            errorMessage = error.localizedDescription
         }
         isLoading = false
     }
@@ -54,10 +59,19 @@ final class VideoListViewModel {
     var isLoading = false
     var errorMessage: String?
     var selection: Set<String> = []
+    var deleteFailures: [BatchDeleteResult] = []
     var thumbnailRefreshToken: Int = 0
 
     private let client: APIClient
     let room: VideoRoomInfo
+
+    @MainActor private var cacheKey: String {
+        let characters = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/%"))
+        let folder = room.folderPath.addingPercentEncoding(withAllowedCharacters: characters) ?? ""
+        let server = client.baseURL.trimmingCharacters(in:.init(charactersIn:"/"))
+            .addingPercentEncoding(withAllowedCharacters:characters) ?? ""
+        return "VideoListFiles_" + server + "_" + folder
+    }
 
     init(client: APIClient, room: VideoRoomInfo) {
         self.client = client
@@ -67,7 +81,7 @@ final class VideoListViewModel {
     @MainActor
     func load() async {
         // Use stable cache key (hashValue is not stable across launches)
-        let cacheKey = "VideoListFiles_" + room.folderPath
+        let cacheKey = self.cacheKey
         // On manual refresh (files already loaded), invalidate thumbnails
         if !files.isEmpty {
             let urls = files.compactMap { client.thumbnailURL(for: $0) }
@@ -91,24 +105,38 @@ final class VideoListViewModel {
                 self.historyByPath = Dictionary(uniqueKeysWithValues: history.map { ($0.videoPath, $0) })
             }
         } catch {
-            if files.isEmpty {
-                errorMessage = error.localizedDescription
-            }
+            errorMessage = error.localizedDescription
         }
         isLoading = false
     }
 
     @MainActor
     func deleteFile(_ file: VideoFileInfo) async throws {
-        try await client.deleteFile(relPath: file.relPath)
+        let results = try await client.deleteRecordings([file])
+        guard let result = results.first, result.success else {
+            throw APIError.serverError(-1, results.first?.message ?? "服务端未确认删除")
+        }
         files.removeAll { $0.id == file.id }
+        CacheManager.shared.save(files, forKey: cacheKey)
     }
 
     @MainActor
-    func deleteSelected() async throws {
-        let paths = Array(selection)
-        try await client.deleteFiles(relPaths: paths)
-        files.removeAll { selection.contains($0.id) }
-        selection.removeAll()
+    @discardableResult
+    func deleteSelected() async throws -> Int {
+        let paths = selection
+        guard !paths.isEmpty else { return 0 }
+        let selected = files.filter { paths.contains($0.relPath) }.sorted { $0.relPath < $1.relPath }
+        guard selected.count == paths.count else { throw APIError.serverError(-1, "选择已变化，请刷新列表") }
+        let results = try await client.deleteRecordings(selected)
+        let resultsByPath = Dictionary(uniqueKeysWithValues: results.map { ($0.path, $0) })
+        let succeeded = Set(results.filter { $0.success && paths.contains($0.path) }.map(\.path))
+        deleteFailures = paths.subtracting(succeeded).sorted().map { path in
+            BatchDeleteResult(path: path, success: false,
+                message: resultsByPath[path]?.message ?? "服务端未返回该文件的删除结果")
+        }
+        files.removeAll { succeeded.contains($0.id) }
+        selection.subtract(succeeded)
+        CacheManager.shared.save(files, forKey: cacheKey)
+        return succeeded.count
     }
 }

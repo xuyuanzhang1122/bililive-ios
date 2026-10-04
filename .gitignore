@@ -82,3 +82,7 @@ iOSInjectionProject/
 Pods/
 .DS_Store
 **/.DS_Store
+
+.local-t7/
+
+external_tools/

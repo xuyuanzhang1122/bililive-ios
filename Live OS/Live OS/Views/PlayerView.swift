@@ -180,6 +180,10 @@ struct PlayerView: View {
     @State private var resolvedPlaybackURL: URL?
     @State private var resolvingPlayback = true
     @State private var playbackResolveTask: Task<Void, Never>?
+    @State private var sessionModel: PlaybackSessionModel?
+    @State private var authorizationController: PlaybackRefreshCoordinator?
+    @State private var playbackGeneration = 0
+    @State private var playbackActive = true
     @State private var syncMessage: String?
     
     // Gestures States
@@ -348,8 +352,8 @@ struct PlayerView: View {
         .onReceive(player: player, assign: \.playbackState, to: $playbackState)
         .onReceive(player: player, assign: \.isBusy, to: $isBusy)
         .onReceive(player: player, assign: \.buffer, to: $buffer)
-        .onReceive(player.$error.compactMap { $0?.localizedDescription }) { _ in
-            errorMessage = Self.failureMessage(for: file)
+        .onReceive(player.$error.compactMap { $0?.localizedDescription }) { message in
+            errorMessage = message
         }
         .onReceive(saveHistoryTimer) { _ in
             if isPlaying { saveHistory() }
@@ -376,10 +380,10 @@ struct PlayerView: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
         .task(preparePlayer)
-        .task(resolvePlayback)
+        .task(id: client.baseURL + "\u{0}" + client.apiKey) { await resolvePlayback() }
         .onChange(of: resolvedPlaybackURL) { _, newURL in
-            guard let newURL else { return }
-            player.currentItem = .simple(url: newURL)
+            guard sessionModel == nil, playbackActive, let newURL else { return }
+            player.items = [.simple(url: newURL)]
             player.actionAtItemEnd = .pause
             if !didStartPlayback {
                 didStartPlayback = true
@@ -388,8 +392,12 @@ struct PlayerView: View {
             }
         }
         .onDisappear {
+            playbackActive = false
+            playbackGeneration += 1
             playbackResolveTask?.cancel()
+            if let model = sessionModel { Task { await model.close() } }
             saveHistory()
+            authorizationController?.close()
             stopPlayer()
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isCommandDeckVisible)
@@ -575,15 +583,55 @@ struct PlayerView: View {
     @MainActor
     private func resolvePlayback() async {
         playbackResolveTask?.cancel()
+        playbackGeneration += 1
+        let token = playbackGeneration
+        authorizationController?.close()
+        authorizationController = nil
+        if let previous = sessionModel { Task { await previous.close() } }
+        sessionModel = nil
+        resolvedPlaybackURL = nil
+        errorMessage = nil
+        let boundClient = APIClient(baseURL:client.baseURL,apiKey:client.apiKey,playbackAPIMode:client.playbackAPIMode)
         playbackResolveTask = Task { @MainActor in
             resolvingPlayback = true
             defer { resolvingPlayback = false }
             do {
+                var target = file
+                if boundClient.playbackAPIMode != .legacy {
+                    if target.recordingIdentity == nil {
+                        let folder = (target.relPath as NSString).deletingLastPathComponent
+                        let files = try await boundClient.getVideoFiles(folderPath:folder)
+                        if let matched = files.first(where: { $0.relPath == target.relPath }) { target = matched }
+                    }
+                    try Task.checkCancellation()
+                    if boundClient.playbackAPIMode != .legacy {
+                        guard playbackActive, token == playbackGeneration else { return }
+                        guard let identity = target.recordingIdentity else { throw APIError.serverError(-1,"录播身份已变化，请刷新列表") }
+                        let model = PlaybackSessionModel(client:boundClient)
+                        let controller = PlaybackRefreshCoordinator(controller:PillarboxSessionController(player:player))
+                        sessionModel = model; authorizationController = controller
+                        model.onReady = { value in
+                            guard playbackActive, token == playbackGeneration, let url = URL(string:value.url ?? "") else { return }
+                            try await controller.apply(url:url)
+                            guard playbackActive, token == playbackGeneration else { return }
+                            resolvedPlaybackURL = url; errorMessage = nil
+                        }
+                        model.onError = { error in
+                            guard playbackActive, token == playbackGeneration else { return }
+                            errorMessage = error.localizedDescription; resolvedPlaybackURL = nil
+                            controller.close()
+                        }
+                        await model.open(identity:identity,capabilities:NativePlaybackCapabilities.detect())
+                        return
+                    }
+                }
                 var result: PlaybackResolveResult
                 while true {
                     try Task.checkCancellation()
-                    result = try await client.resolvePlayback(file.relPath)
-                    if result.status == "ready", let rawURL = result.url, let url = client.absoluteURL(rawURL) {
+                    result = try await boundClient.resolvePlayback(file.relPath)
+                    try Task.checkCancellation()
+                    guard playbackActive, token == playbackGeneration else { return }
+                    if result.status == "ready", let rawURL = result.url, let url = boundClient.absoluteURL(rawURL) {
                         resolvedPlaybackURL = url
                         errorMessage = nil
                         return
@@ -593,19 +641,20 @@ struct PlayerView: View {
                         resolvedPlaybackURL = nil
                         return
                     }
-                    let seconds = max(1, result.retryAfterSeconds ?? 2)
+                    let seconds = result.retryAfterSeconds ?? 2
                     try await Task.sleep(for: .seconds(seconds))
                 }
             } catch is CancellationError {
                 return
             } catch {
-                // 兼容旧服务端：解析接口不可用时回退到列表接口返回的播放地址。
-                if let fallback = client.playbackURL(for: file) {
+                if Task.isCancelled || !playbackActive || token != playbackGeneration { return }
+                // 仅旧端点缺失允许回退，不能吞掉鉴权、网络或契约错误。
+                if boundClient.playbackAPIMode == .legacy, APIClient.canFallbackPlayback(error), let fallback = boundClient.playbackURL(for: file) {
                     resolvedPlaybackURL = fallback
                     errorMessage = nil
                 } else {
                     resolvedPlaybackURL = nil
-                    errorMessage = Self.failureMessage(for: file)
+                    errorMessage = error.localizedDescription
                 }
             }
         }
@@ -635,7 +684,12 @@ struct PlayerView: View {
     }
 
     func closePlayer() {
+        playbackActive = false
+        playbackGeneration += 1
+        playbackResolveTask?.cancel()
+        if let model = sessionModel { Task { await model.close() } }
         saveHistory()
+        authorizationController?.close()
         PictureInPicture.shared.close()
         stopPlayer()
         dismiss()

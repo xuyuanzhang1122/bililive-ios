@@ -36,7 +36,19 @@ struct PlaybackResolveResult: Decodable {
     let url: String?
     let expiresAt: Int64?
     let error: String?
-    let retryAfterSeconds: Int?
+    let retryAfterSeconds: Double?
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        status = try values.decode(String.self, forKey: .status)
+        protocolName = try values.decodeIfPresent(String.self, forKey: .protocolName)
+        mimeType = try values.decodeIfPresent(String.self, forKey: .mimeType)
+        url = try values.decodeIfPresent(String.self, forKey: .url)
+        expiresAt = try values.decodeIfPresent(Int64.self, forKey: .expiresAt)
+        error = try values.decodeIfPresent(String.self, forKey: .error)
+        let retry = try? values.decode(Double.self, forKey: .retryAfterSeconds)
+        retryAfterSeconds = retry.map { $0.isFinite ? min(10, max(1, $0)) : 2 } ?? 2
+    }
 
     enum CodingKeys: String, CodingKey {
         case status
@@ -90,4 +102,10 @@ enum APIError: LocalizedError {
         case .decodingError(let e):     return "数据解析失败: \(e.localizedDescription)"
         }
     }
+}
+
+struct BatchDeleteResult: Codable {
+    let path: String
+    let success: Bool
+    let message: String?
 }

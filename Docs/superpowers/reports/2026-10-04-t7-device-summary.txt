@@ -1,0 +1,11 @@
+T7_DEVICE 1791110252.843997 CAPABILITIES {"protocols":["file","hls"],"audio":[{"maxSampleRate":48000,"codec":"aac","profiles":["lc"],"maxChannels":2}],"containers":["mp4","hls"],"video":[{"maxWidth":1920,"profiles":["baseline","main","high"],"maxLevel":42,"codec":"h264","hdr":false,"maxHeight":1080,"maxFps":60,"maxBitDepth":8}]}
+T7_DEVICE 1791110253.1265101 FIRST_FRAME phase=cold latency=0.22067499160766602 position=0.0
+T7_DEVICE 1791110253.335606 SEEK phase=cold position=210.0 rate=1.5 playing=false
+T7_DEVICE 1791110253.377702 CANCEL phase=cold status=cancelled
+T7_DEVICE 1791110253.59968 FIRST_FRAME phase=warm latency=0.21474504470825195 position=0.0
+T7_DEVICE 1791110253.91976 SEEK phase=warm position=210.0 rate=1.5 playing=false
+T7_DEVICE 1791110494.5894709 REFRESH_STATE phase=warm position=210.0 rate=1.5 playing=false
+T7_DEVICE 1791110494.589538 REFRESH phase=warm position=210.0 rate=1.5 paused=true tokenExpiry=1791110794
+T7_DEVICE 1791110556.259541 PAST_OLD_TOKEN position=302.025175745 playing=true
+T7_DEVICE 1791110556.325001 CANCEL phase=warm status=cancelled
+T7_DEVICE 1791110556.326227 PASS sample=t6-duration.mp4 actualAVPlayerLayer=true targetLargeRecording=false
