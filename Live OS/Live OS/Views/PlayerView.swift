@@ -352,7 +352,7 @@ struct PlayerView: View {
         }
     }
 
-    var body: some View {
+    private var observedPlayerContent: some View {
         playerContent
         .bind(progressTracker, to: player)
         .onReceive(player: player, assign: \.playbackState, to: $playbackState)
@@ -373,13 +373,19 @@ struct PlayerView: View {
         .onChange(of: resumeEntry?.durationSeconds) { _, _ in
             Task { await applyResumeWhenReady() }
         }
-        .background {
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { viewWidth = geo.size.width }
-                    .onChange(of: geo.size.width) { _, newWidth in viewWidth = newWidth }
-            }
+    }
+
+    private var playerGeometry: some View {
+        GeometryReader { geo in
+            Color.clear
+                .onAppear { viewWidth = geo.size.width }
+                .onChange(of: geo.size.width) { _, newWidth in viewWidth = newWidth }
         }
+    }
+
+    private var configuredPlayerContent: some View {
+        observedPlayerContent
+        .background(playerGeometry)
         .onAppear {
             currentBrightness = activeScreen()?.brightness ?? currentBrightness
         }
@@ -387,6 +393,10 @@ struct PlayerView: View {
         .statusBarHidden(true)
         .task(preparePlayer)
         .task(id: client.baseURL + "\u{0}" + client.apiKey) { await resolvePlayback() }
+    }
+
+    var body: some View {
+        configuredPlayerContent
         .onChange(of: resolvedPlaybackURL) { _, newURL in
             guard sessionModel == nil, playbackActive, let newURL else { return }
             player.items = [.simple(url: newURL)]
