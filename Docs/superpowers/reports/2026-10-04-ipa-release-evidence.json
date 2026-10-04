@@ -1,0 +1,21 @@
+{
+  "tag": "v2.0.3-rc.5",
+  "release_url": "https://github.com/xuyuanzhang1122/bililive-ios/releases/tag/v2.0.3-rc.5",
+  "prerelease": true,
+  "ipa_url": "https://github.com/xuyuanzhang1122/bililive-ios/releases/download/v2.0.3-rc.5/LiveOS.ipa",
+  "ipa_sha256": "5289bfd400c66f956272a71977c12222ab8961a12e90993f9652e16411d3d580",
+  "ipa_bytes": 8695846,
+  "actions": {
+    "conclusion": "success",
+    "databaseId": 37202297849,
+    "headSha": "d6389afa040d8bf858eec31f61c7092a35c27752",
+    "status": "completed",
+    "url": "https://github.com/xuyuanzhang1122/bililive-ios/actions/runs/37202297849"
+  },
+  "artifact_matches_release": true,
+  "zip_integrity": true,
+  "bundle_id": "bililiveos.Live-OS",
+  "bundle_version": "5",
+  "marketing_version": "2.0.3",
+  "unsigned": true
+}
