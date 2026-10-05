@@ -249,7 +249,9 @@ struct SettingsView: View {
     }
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
+        let name = Bundle.main.infoDictionary?["LiveOSReleaseName"] as? String ?? "sun"
+        return "\(name)（\(version)）"
     }
 
     private func testConnection() {
@@ -756,6 +758,20 @@ struct StorageManagementView: View {
 struct AboutVersionView: View {
     var body: some View {
         List {
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("sun · 正式大版本（3.0.0）")
+                        .font(.headline)
+                    changelogItem(icon: "play.rectangle.fill", color: .blue, text: "统一录播目录和播放会话，按设备实际解码能力选择播放版本")
+                    changelogItem(icon: "clock.arrow.circlepath", color: .green, text: "稳定录播身份与续播进度，播放授权自动刷新，退出后取消会话")
+                    changelogItem(icon: "film", color: .orange, text: "搭配 sun 服务端，录制结束自动准备播放文件；准备完成后自动继续播放")
+                    changelogItem(icon: "checkmark.shield.fill", color: .teal, text: "准备失败保留原录播，旧库可预览后准备；显示可理解的错误提示")
+                    changelogItem(icon: "externaldrive.fill", color: .purple, text: "保留跨端观看历史、存储统计、逐项删除与备份恢复")
+                }
+                .padding(.vertical, 8)
+            } header: {
+                Text("2026-10-05 · 当前版本")
+            }
             Section {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("2.0 版本更新内容")

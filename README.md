@@ -79,7 +79,7 @@
 
 ### 方案 A：下载现成 IPA（推荐）
 
-去 **[Releases](https://github.com/xuyuanzhang1122/bililive-ios/releases)** 页下载构建好的 `.ipa`。
+当前正式版本 **[sun](https://github.com/xuyuanzhang1122/bililive-ios/releases/tag/sun)**。应用显示 `sun（3.0.0）`，系统版本 `3.0.0`、构建号 `6`。去 Release 下载 `LiveOS.ipa`，使用 AltStore / Sideloadly 自行签名安装；服务端建议同步升级至 `sun`。完整变化见 [RELEASE_NOTES.md](RELEASE_NOTES.md)，设置中的版本详情也已同步。
 
 > ⚠️ IPA 没经过企业签名，不能直接装。用 **AltStore** / **Sideloadly** / **爱思助手** 做个人签名后安装。
 
