@@ -1,0 +1,29 @@
+{
+  "assets": [
+    {
+      "digest": "sha256:e15416859de9c9eb734e2779f8f4aa16f99bab97f9caf54943fbfe2ab2aaf663",
+      "name": "LiveOS.ipa",
+      "size": 8699764,
+      "url": "https://github.com/xuyuanzhang1122/bililive-ios/releases/download/sun/LiveOS.ipa"
+    }
+  ],
+  "draft": false,
+  "prerelease": false,
+  "tag": "sun",
+  "url": "https://github.com/xuyuanzhang1122/bililive-ios/releases/tag/sun",
+  "run": {
+    "id": 37300317425,
+    "url": "https://github.com/xuyuanzhang1122/bililive-ios/actions/runs/37300317425",
+    "conclusion": "success",
+    "xcode": "26.4.1"
+  },
+  "verified_download": {
+    "action_matches_release": true,
+    "zip_valid": true,
+    "version": "3.0.0",
+    "build": "6",
+    "release_name": "sun",
+    "size": 8699764,
+    "sha256": "e15416859de9c9eb734e2779f8f4aa16f99bab97f9caf54943fbfe2ab2aaf663"
+  }
+}
